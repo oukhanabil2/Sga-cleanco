@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SGA - Système de Gestion des Agents</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#34495e"/>
+    <link rel="apple-touch-icon" href="icon.png">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div id="app-container">
+
+        <header class="app-header">
+            <h1>SYSTEME DE GESTION DES AGENTS</h1>
+            <p id="sub-title">Menu Principal</p>
+        </header>
+
+        <main id="main-content">
+            <!-- Contenu dynamique -->
+        </main>
+
+        <div id="overlay" class="overlay">
+            <div id="popup-content" class="popup-content">
+                <!-- Contenu des popups -->
+            </div>
+        </div>
+
+        <!-- Snackbar pour les messages -->
+        <div id="snackbar" style="display:none;"></div>
+
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+    <script>
+        // Enregistrer le Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registered: ', registration);
+                    })
+                    .catch(error => {
+                        console.log('ServiceWorker registration failed: ', error);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>
