@@ -4,121 +4,52 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SGA - Système de Gestion des Agents</title>
-    
-    <!-- PWA Configuration -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="icon.png">
-    <meta name="theme-color" content="#2c3e50">
-    
-    <!-- CSS -->
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#34495e"/>
+    <link rel="apple-touch-icon" href="icon.png">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🔐 SGA - Système de Gestion des Agents</h1>
-            <h2>Version Complète - Gestion Planning & Personnel</h2>
-        </div>
-        
-        <h2 id="sub-title">Chargement du système...</h2>
-        
-        <div class="main-content" id="main-content">
-            <!-- Le contenu dynamique sera inséré ici par JavaScript -->
-            <div style="text-align: center; padding: 50px;">
-                <div style="font-size: 2em; color: #3498db; margin-bottom: 20px;">🔐</div>
-                <p>Veuillez patienter pendant le chargement du système...</p>
+
+    <div id="app-container">
+
+        <header class="app-header">
+            <h1>SYSTEME DE GESTION DES AGENTS</h1>
+            <p id="sub-title">Menu Principal</p>
+        </header>
+
+        <main id="main-content">
+            <!-- Contenu dynamique -->
+        </main>
+
+        <div id="overlay" class="overlay">
+            <div id="popup-content" class="popup-content">
+                <!-- Contenu des popups -->
             </div>
         </div>
+
+        <!-- Snackbar pour les messages -->
+        <div id="snackbar" style="display:none;"></div>
+
     </div>
 
-    <!-- Overlay pour les popups -->
-    <div id="overlay">
-        <div class="popup-content" id="popup-content">
-            <!-- Le contenu des popups sera inséré ici par JavaScript -->
-        </div>
-    </div>
-
-    <!-- Scripts -->
     <script src="data.js"></script>
     <script src="app.js"></script>
-    
     <script>
-        // Enregistrement du Service Worker pour PWA
+        // Enregistrer le Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./service-worker.js')
+                navigator.serviceWorker.register('/service-worker.js')
                     .then(registration => {
-                        console.log('Service Worker enregistré:', registration);
-                        
-                        // Vérifier les mises à jour
-                        registration.addEventListener('updatefound', () => {
-                            const newWorker = registration.installing;
-                            console.log('Nouveau Service Worker trouvé:', newWorker);
-                            
-                            newWorker.addEventListener('statechange', () => {
-                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                    if (confirm('Une nouvelle version est disponible. Recharger ?')) {
-                                        window.location.reload();
-                                    }
-                                }
-                            });
-                        });
+                        console.log('ServiceWorker registered: ', registration);
                     })
                     .catch(error => {
-                        console.error('Erreur Service Worker:', error);
+                        console.log('ServiceWorker registration failed: ', error);
                     });
             });
         }
-
-        // Script d'initialisation minimal
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('SGA System initializing...');
-            
-            // Vérifier que les données sont chargées
-            const dataCheck = () => {
-                if (typeof agentsData === 'undefined') {
-                    window.agentsData = [];
-                    console.log('⚠️ agentsData non trouvé, initialisation avec tableau vide');
-                }
-                
-                if (typeof radiosData === 'undefined') {
-                    window.radiosData = [];
-                    console.log('⚠️ radiosData non trouvé, initialisation avec tableau vide');
-                }
-                
-                if (typeof uniformsData === 'undefined') {
-                    window.uniformsData = [];
-                    console.log('⚠️ uniformsData non trouvé, initialisation avec tableau vide');
-                }
-                
-                if (typeof warningsData === 'undefined') {
-                    window.warningsData = [];
-                    console.log('⚠️ warningsData non trouvé, initialisation avec tableau vide');
-                }
-                
-                if (typeof panicCodesData === 'undefined') {
-                    window.panicCodesData = [];
-                    console.log('⚠️ panicCodesData non trouvé, initialisation avec tableau vide');
-                }
-                
-                if (typeof holidaysData === 'undefined') {
-                    window.holidaysData = [];
-                    console.log('⚠️ holidaysData non trouvé, initialisation avec tableau vide');
-                }
-                
-                if (typeof leavesData === 'undefined') {
-                    window.leavesData = [];
-                    console.log('⚠️ leavesData non trouvé, initialisation avec tableau vide');
-                }
-                
-                console.log('✅ Données initialisées');
-            };
-            
-            // Attendre que les scripts soient chargés
-            setTimeout(dataCheck, 100);
-        });
     </script>
 </body>
 </html>
