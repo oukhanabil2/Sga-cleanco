@@ -3207,7 +3207,2442 @@ function checkExpiredWarnings() {
         saveData();
     }
 }
+// === MODULE RADIOS - FONCTIONS IMPLÉMENTÉES ===
 
+function showAddRadioForm() {
+    if (!checkPassword()) return;
+    
+    let html = `
+        <div class="info-section">
+            <h3>➕ Ajouter une Nouvelle Radio</h3>
+            <form id="addRadioForm" onsubmit="return saveNewRadio(event)">
+                <div class="form-group">
+                    <label>ID Radio *</label>
+                    <input type="text" id="radioId" class="form-input" required 
+                           placeholder="Ex: RAD001" maxlength="20">
+                    <small class="form-text">Identifiant unique de la radio</small>
+                </div>
+                <div class="form-group">
+                    <label>Modèle *</label>
+                    <input type="text" id="radioModel" class="form-input" required 
+                           placeholder="Ex: Motorola XPR 7550">
+                </div>
+                <div class="form-group">
+                    <label>Numéro de Série</label>
+                    <input type="text" id="radioSerial" class="form-input" 
+                           placeholder="Ex: SN123456789">
+                </div>
+                <div class="form-group">
+                    <label>Statut *</label>
+                    <select id="radioStatus" class="form-input" required>
+                        <option value="DISPONIBLE">Disponible</option>
+                        <option value="ATTRIBUEE">Attribuée</option>
+                        <option value="HS">Hors Service</option>
+                        <option value="REPARATION">En Réparation</option>
+                        <option value="PERDUE">Perdue</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Date d'Acquisition</label>
+                    <input type="date" id="radioAcquisitionDate" class="form-input" 
+                           value="${new Date().toISOString().split('T')[0]}">
+                </div>
+                <div class="form-group">
+                    <label>Prix d'Achat (DH)</label>
+                    <input type="number" id="radioPrice" class="form-input" 
+                           placeholder="Ex: 2500" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Fournisseur</label>
+                    <input type="text" id="radioSupplier" class="form-input" 
+                           placeholder="Ex: Motorola Maroc">
+                </div>
+                <div class="form-group">
+                    <label>Commentaires</label>
+                    <textarea id="radioComments" class="form-input" rows="3" 
+                              placeholder="État, accessoires, remarques..."></textarea>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    openPopup("➕ Ajouter une Radio", html, `
+        <button class="popup-button green" onclick="document.getElementById('addRadioForm').submit()">
+            💾 Enregistrer
+        </button>
+        <button class="popup-button gray" onclick="showRadiosList()">
+            Annuler
+        </button>
+    `);
+}
+
+function saveNewRadio(event) {
+    if (event) event.preventDefault();
+    if (!checkPassword()) return false;
+    
+    const radioId = document.getElementById('radioId').value.toUpperCase();
+    const model = document.getElementById('radioModel').value;
+    const serial = document.getElementById('radioSerial').value;
+    const status = document.getElementById('radioStatus').value;
+    const acquisitionDate = document.getElementById('radioAcquisitionDate').value;
+    const price = document.getElementById('radioPrice').value;
+    const supplier = document.getElementById('radioSupplier').value;
+    const comments = document.getElementById('radioComments').value;
+    
+    if (!radioId || !model || !status) {
+        showSnackbar("⚠️ Veuillez remplir les champs obligatoires");
+        return false;
+    }
+    
+    // Vérifier si l'ID existe déjà
+    const existingRadio = radios.find(r => r.id === radioId);
+    if (existingRadio) {
+        showSnackbar(`⚠️ La radio ${radioId} existe déjà`);
+        return false;
+    }
+    
+    // Créer l'objet radio
+    const newRadio = {
+        id: radioId,
+        model: model,
+        serial: serial || '',
+        status: status,
+        acquisitionDate: acquisitionDate || new Date().toISOString().split('T')[0],
+        price: price ? parseFloat(price) : null,
+        supplier: supplier || '',
+        comments: comments || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        history: []
+    };
+    
+    // Ajouter à l'historique
+    newRadio.history.push({
+        date: new Date().toISOString(),
+        action: 'CREATION',
+        details: `Radio créée - Statut: ${status}`,
+        user: 'Admin'
+    });
+    
+    radios.push(newRadio);
+    saveData();
+    
+    showSnackbar(`✅ Radio ${radioId} ajoutée avec succès`);
+    showRadiosList();
+    closePopup();
+    return false;
+}
+
+function showEditRadioList() {
+    if (!checkPassword()) return;
+    
+    let html = `
+        <div class="info-section">
+            <h3>✏️ Modifier une Radio</h3>
+            <div style="margin-bottom: 15px;">
+                <input type="text" id="searchRadioEdit" placeholder="Rechercher radio..." 
+                       class="form-input" style="width: 100%;"
+                       onkeyup="filterRadiosEdit()">
+            </div>
+            <div id="radioEditList" style="max-height: 400px; overflow-y: auto;">
+                ${generateRadioEditList()}
+            </div>
+        </div>
+    `;
+    
+    openPopup("✏️ Modifier une Radio", html, `
+        <button class="popup-button gray" onclick="showRadiosList()">
+            Retour
+        </button>
+    `);
+}
+
+function generateRadioEditList() {
+    if (radios.length === 0) {
+        return '<p style="text-align:center; color:#7f8c8d; padding:20px;">Aucune radio trouvée</p>';
+    }
+    
+    return `
+        <table class="classement-table">
+            <thead>
+                <tr>
+                    <th>ID Radio</th>
+                    <th>Modèle</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${radios.map(radio => `
+                    <tr>
+                        <td><strong>${radio.id}</strong></td>
+                        <td>${radio.model}</td>
+                        <td>
+                            <span class="status-badge ${getRadioStatusClass(radio.status)}">
+                                ${radio.status}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="action-btn small blue" onclick="showEditRadioForm('${radio.id}')">
+                                ✏️ Modifier
+                            </button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function getRadioStatusClass(status) {
+    switch(status) {
+        case 'DISPONIBLE': return 'active';
+        case 'ATTRIBUEE': return 'warning';
+        case 'HS': return 'inactive';
+        case 'REPARATION': return 'warning';
+        case 'PERDUE': return 'inactive';
+        default: return '';
+    }
+}
+
+function showEditRadioForm(radioId) {
+    if (!checkPassword()) return;
+    
+    const radio = radios.find(r => r.id === radioId);
+    if (!radio) {
+        showSnackbar("⚠️ Radio non trouvée");
+        return;
+    }
+    
+    let html = `
+        <div class="info-section">
+            <h3>✏️ Modifier Radio ${radioId}</h3>
+            <form id="editRadioForm" onsubmit="return updateRadio('${radioId}', event)">
+                <div class="form-group">
+                    <label>ID Radio</label>
+                    <input type="text" value="${radio.id}" class="form-input" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Modèle *</label>
+                    <input type="text" id="editRadioModel" value="${radio.model}" 
+                           class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label>Numéro de Série</label>
+                    <input type="text" id="editRadioSerial" value="${radio.serial || ''}" 
+                           class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Statut *</label>
+                    <select id="editRadioStatus" class="form-input" required>
+                        <option value="DISPONIBLE" ${radio.status === 'DISPONIBLE' ? 'selected' : ''}>
+                            Disponible
+                        </option>
+                        <option value="ATTRIBUEE" ${radio.status === 'ATTRIBUEE' ? 'selected' : ''}>
+                            Attribuée
+                        </option>
+                        <option value="HS" ${radio.status === 'HS' ? 'selected' : ''}>
+                            Hors Service
+                        </option>
+                        <option value="REPARATION" ${radio.status === 'REPARATION' ? 'selected' : ''}>
+                            En Réparation
+                        </option>
+                        <option value="PERDUE" ${radio.status === 'PERDUE' ? 'selected' : ''}>
+                            Perdue
+                        </option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Date d'Acquisition</label>
+                    <input type="date" id="editRadioAcquisitionDate" 
+                           value="${radio.acquisitionDate || ''}" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Prix d'Achat (DH)</label>
+                    <input type="number" id="editRadioPrice" value="${radio.price || ''}" 
+                           class="form-input" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Fournisseur</label>
+                    <input type="text" id="editRadioSupplier" value="${radio.supplier || ''}" 
+                           class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Commentaires</label>
+                    <textarea id="editRadioComments" class="form-input" rows="3">${radio.comments || ''}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Motif de modification</label>
+                    <input type="text" id="editRadioReason" class="form-input" 
+                           placeholder="Raison de la modification..." required>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    openPopup(`✏️ Modifier Radio ${radioId}`, html, `
+        <button class="popup-button green" onclick="document.getElementById('editRadioForm').submit()">
+            💾 Enregistrer
+        </button>
+        <button class="popup-button blue" onclick="showEditRadioList()">
+            ↩️ Retour
+        </button>
+        <button class="popup-button gray" onclick="closePopup()">
+            Annuler
+        </button>
+    `);
+}
+
+function updateRadio(radioId, event) {
+    if (event) event.preventDefault();
+    if (!checkPassword()) return false;
+    
+    const radioIndex = radios.findIndex(r => r.id === radioId);
+    if (radioIndex === -1) {
+        showSnackbar("⚠️ Radio non trouvée");
+        return false;
+    }
+    
+    const oldStatus = radios[radioIndex].status;
+    const newStatus = document.getElementById('editRadioStatus').value;
+    const reason = document.getElementById('editRadioReason').value;
+    
+    // Mettre à jour les informations
+    radios[radioIndex] = {
+        ...radios[radioIndex],
+        model: document.getElementById('editRadioModel').value,
+        serial: document.getElementById('editRadioSerial').value,
+        status: newStatus,
+        acquisitionDate: document.getElementById('editRadioAcquisitionDate').value,
+        price: document.getElementById('editRadioPrice').value ? 
+               parseFloat(document.getElementById('editRadioPrice').value) : null,
+        supplier: document.getElementById('editRadioSupplier').value,
+        comments: document.getElementById('editRadioComments').value,
+        updatedAt: new Date().toISOString()
+    };
+    
+    // Ajouter à l'historique si le statut a changé
+    if (oldStatus !== newStatus) {
+        if (!radios[radioIndex].history) radios[radioIndex].history = [];
+        radios[radioIndex].history.push({
+            date: new Date().toISOString(),
+            action: 'STATUT_CHANGE',
+            details: `Statut changé de ${oldStatus} à ${newStatus} - Raison: ${reason}`,
+            user: 'Admin'
+        });
+    }
+    
+    saveData();
+    showSnackbar(`✅ Radio ${radioId} mise à jour`);
+    showEditRadioList();
+    closePopup();
+    return false;
+}
+
+function showRadiosList() {
+    let html = `
+        <div class="info-section">
+            <h3>📻 Liste des Radios</h3>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                <input type="text" id="searchRadioList" placeholder="Rechercher radio..." 
+                       class="form-input" style="width: 70%;"
+                       onkeyup="filterRadioList()">
+                <button class="popup-button blue" onclick="showRadiosStatus()">
+                    📊 Statut
+                </button>
+            </div>
+            <div id="radioListContainer" style="max-height: 500px; overflow-y: auto;">
+                ${generateRadioListTable()}
+            </div>
+        </div>
+    `;
+    
+    openPopup("📻 Gestion des Radios", html, `
+        <button class="popup-button green" onclick="showAddRadioForm()">
+            ➕ Ajouter
+        </button>
+        <button class="popup-button blue" onclick="showRadiosHistory()">
+            📋 Historique
+        </button>
+        <button class="popup-button gray" onclick="displayRadiosMenu()">
+            Retour
+        </button>
+    `);
+}
+
+function generateRadioListTable() {
+    if (radios.length === 0) {
+        return '<p style="text-align:center; color:#7f8c8d; padding:20px;">Aucune radio enregistrée</p>';
+    }
+    
+    // Calculer les statistiques
+    const stats = {
+        total: radios.length,
+        disponible: radios.filter(r => r.status === 'DISPONIBLE').length,
+        attribuee: radios.filter(r => r.status === 'ATTRIBUEE').length,
+        hs: radios.filter(r => r.status === 'HS').length,
+        reparation: radios.filter(r => r.status === 'REPARATION').length,
+        perdue: radios.filter(r => r.status === 'PERDUE').length
+    };
+    
+    return `
+        <div style="margin-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px;">
+                <div style="text-align: center; padding: 10px; background: #2c3e50; border-radius: 5px;">
+                    <div style="font-size: 1.5em; font-weight: bold; color: #3498db;">${stats.total}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Total</div>
+                </div>
+                <div style="text-align: center; padding: 10px; background: #27ae60; border-radius: 5px;">
+                    <div style="font-size: 1.5em; font-weight: bold; color: white;">${stats.disponible}</div>
+                    <div style="font-size: 0.9em; color: white;">Disponibles</div>
+                </div>
+                <div style="text-align: center; padding: 10px; background: #f39c12; border-radius: 5px;">
+                    <div style="font-size: 1.5em; font-weight: bold; color: white;">${stats.attribuee}</div>
+                    <div style="font-size: 0.9em; color: white;">Attribuées</div>
+                </div>
+                <div style="text-align: center; padding: 10px; background: #e74c3c; border-radius: 5px;">
+                    <div style="font-size: 1.5em; font-weight: bold; color: white;">${stats.hs + stats.reparation + stats.perdue}</div>
+                    <div style="font-size: 0.9em; color: white;">Indisponibles</div>
+                </div>
+            </div>
+        </div>
+        <table class="classement-table">
+            <thead>
+                <tr>
+                    <th>ID Radio</th>
+                    <th>Modèle</th>
+                    <th>Numéro Série</th>
+                    <th>Statut</th>
+                    <th>Date Acquisition</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${radios.map(radio => {
+                    const statusClass = getRadioStatusClass(radio.status);
+                    const statusColors = {
+                        'DISPONIBLE': '#27ae60',
+                        'ATTRIBUEE': '#f39c12',
+                        'HS': '#e74c3c',
+                        'REPARATION': '#e67e22',
+                        'PERDUE': '#95a5a6'
+                    };
+                    return `
+                        <tr>
+                            <td><strong>${radio.id}</strong></td>
+                            <td>${radio.model}</td>
+                            <td>${radio.serial || '-'}</td>
+                            <td>
+                                <span style="background-color:${statusColors[radio.status] || '#7f8c8d'}; 
+                                      color:white; padding:3px 8px; border-radius:12px; font-size:0.8em;">
+                                    ${radio.status}
+                                </span>
+                            </td>
+                            <td>${radio.acquisitionDate ? new Date(radio.acquisitionDate).toLocaleDateString('fr-FR') : '-'}</td>
+                            <td style="white-space: nowrap;">
+                                <button class="action-btn small blue" onclick="showEditRadioForm('${radio.id}')" title="Modifier">
+                                    ✏️
+                                </button>
+                                ${radio.status === 'DISPONIBLE' ? 
+                                    `<button class="action-btn small green" onclick="showAssignRadioForm('${radio.id}')" title="Attribuer">
+                                        📲
+                                    </button>` : ''}
+                                ${radio.status === 'ATTRIBUEE' ? 
+                                    `<button class="action-btn small orange" onclick="showReturnRadioForm('${radio.id}')" title="Retourner">
+                                        🔄
+                                    </button>` : ''}
+                                <button class="action-btn small red" onclick="deleteRadioConfirm('${radio.id}')" title="Supprimer">
+                                    🗑️
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function showAssignRadioForm(radioId) {
+    if (!checkPassword()) return;
+    
+    const radio = radios.find(r => r.id === radioId);
+    if (!radio || radio.status !== 'DISPONIBLE') {
+        showSnackbar("⚠️ Cette radio n'est pas disponible pour attribution");
+        return;
+    }
+    
+    let html = `
+        <div class="info-section">
+            <h3>📲 Attribuer Radio ${radioId}</h3>
+            <form id="assignRadioForm" onsubmit="return assignRadioToAgent('${radioId}', event)">
+                <div class="form-group">
+                    <label>Radio à attribuer</label>
+                    <input type="text" value="${radioId} - ${radio.model}" class="form-input" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Agent *</label>
+                    <select id="assignAgent" class="form-input" required>
+                        <option value="">Sélectionner un agent</option>
+                        ${agents.filter(a => a.statut === 'actif').map(agent => `
+                            <option value="${agent.code}">
+                                ${agent.nom} ${agent.prenom} (${agent.code}) - Groupe ${agent.groupe}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Date d'attribution *</label>
+                    <input type="date" id="assignDate" class="form-input" required 
+                           value="${new Date().toISOString().split('T')[0]}">
+                </div>
+                <div class="form-group">
+                    <label>Motif d'attribution</label>
+                    <select id="assignReason" class="form-input">
+                        <option value="SERVICE_NORMAL">Service normal</option>
+                        <option value="REMplacement">Remplacement</option>
+                        <option value="NOUVEAU">Nouvel agent</option>
+                        <option value="URGENCE">Urgence</option>
+                        <option value="AUTRE">Autre</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Commentaires</label>
+                    <textarea id="assignComments" class="form-input" rows="3" 
+                              placeholder="Remarques sur l'attribution..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Signature de l'agent</label>
+                    <input type="text" id="assignSignature" class="form-input" 
+                           placeholder="Nom de l'agent pour signature">
+                </div>
+            </form>
+        </div>
+    `;
+    
+    openPopup(`📲 Attribuer Radio ${radioId}`, html, `
+        <button class="popup-button green" onclick="document.getElementById('assignRadioForm').submit()">
+            ✅ Attribuer
+        </button>
+        <button class="popup-button gray" onclick="showRadiosList()">
+            Annuler
+        </button>
+    `);
+}
+
+function assignRadioToAgent(radioId, event) {
+    if (event) event.preventDefault();
+    if (!checkPassword()) return false;
+    
+    const agentCode = document.getElementById('assignAgent').value;
+    const assignDate = document.getElementById('assignDate').value;
+    const reason = document.getElementById('assignReason').value;
+    const comments = document.getElementById('assignComments').value;
+    const signature = document.getElementById('assignSignature').value;
+    
+    if (!agentCode || !assignDate) {
+        showSnackbar("⚠️ Veuillez remplir les champs obligatoires");
+        return false;
+    }
+    
+    const radioIndex = radios.findIndex(r => r.id === radioId);
+    if (radioIndex === -1) {
+        showSnackbar("⚠️ Radio non trouvée");
+        return false;
+    }
+    
+    const agent = agents.find(a => a.code === agentCode);
+    if (!agent) {
+        showSnackbar("⚠️ Agent non trouvé");
+        return false;
+    }
+    
+    // Mettre à jour la radio
+    radios[radioIndex].status = 'ATTRIBUEE';
+    radios[radioIndex].assignedTo = agentCode;
+    radios[radioIndex].assignDate = assignDate;
+    radios[radioIndex].assignReason = reason;
+    radios[radioIndex].assignComments = comments;
+    radios[radioIndex].assignSignature = signature;
+    radios[radioIndex].updatedAt = new Date().toISOString();
+    
+    // Ajouter à l'historique
+    if (!radios[radioIndex].history) radios[radioIndex].history = [];
+    radios[radioIndex].history.push({
+        date: new Date().toISOString(),
+        action: 'ATTRIBUTION',
+        details: `Attribuée à ${agentCode} (${agent.nom} ${agent.prenom}) - Motif: ${reason}`,
+        user: 'Admin'
+    });
+    
+    // Ajouter à l'historique global
+    if (!radioHistory) radioHistory = [];
+    radioHistory.push({
+        id: 'H' + Date.now(),
+        radioId: radioId,
+        agentCode: agentCode,
+        action: 'ATTRIBUTION',
+        date: assignDate,
+        details: `Radio attribuée - Motif: ${reason}`,
+        comments: comments,
+        createdBy: 'Admin'
+    });
+    
+    saveData();
+    showSnackbar(`✅ Radio ${radioId} attribuée à ${agentCode}`);
+    showRadiosList();
+    closePopup();
+    return false;
+}
+
+function showReturnRadioForm(radioId) {
+    if (!checkPassword()) return;
+    
+    const radio = radios.find(r => r.id === radioId);
+    if (!radio || radio.status !== 'ATTRIBUEE') {
+        showSnackbar("⚠️ Cette radio n'est pas actuellement attribuée");
+        return;
+    }
+    
+    const agent = agents.find(a => a.code === radio.assignedTo);
+    const agentName = agent ? `${agent.nom} ${agent.prenom}` : radio.assignedTo;
+    
+    let html = `
+        <div class="info-section">
+            <h3>🔄 Retourner Radio ${radioId}</h3>
+            <form id="returnRadioForm" onsubmit="return returnRadioFromAgent('${radioId}', event)">
+                <div class="form-group">
+                    <label>Radio à retourner</label>
+                    <input type="text" value="${radioId} - ${radio.model}" class="form-input" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Actuellement attribuée à</label>
+                    <input type="text" value="${agentName} (${radio.assignedTo})" class="form-input" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Date de retour *</label>
+                    <input type="date" id="returnDate" class="form-input" required 
+                           value="${new Date().toISOString().split('T')[0]}">
+                </div>
+                <div class="form-group">
+                    <label>État de la radio *</label>
+                    <select id="returnCondition" class="form-input" required>
+                        <option value="BON">Bon état</option>
+                        <option value="LEGER_USURE">Légère usure</option>
+                        <option value="DOMMAGE">Dommage mineur</option>
+                        <option value="HS">Hors service</option>
+                        <option value="MANQUANT">Pièce manquante</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Nouveau statut *</label>
+                    <select id="newStatus" class="form-input" required>
+                        <option value="DISPONIBLE">Disponible</option>
+                        <option value="REPARATION">En réparation</option>
+                        <option value="HS">Hors service</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Commentaires</label>
+                    <textarea id="returnComments" class="form-input" rows="3" 
+                              placeholder="Décrire l'état, les problèmes..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Signature</label>
+                    <input type="text" id="returnSignature" class="form-input" 
+                           placeholder="Nom de la personne qui reçoit">
+                </div>
+            </form>
+        </div>
+    `;
+    
+    openPopup(`🔄 Retourner Radio ${radioId}`, html, `
+        <button class="popup-button green" onclick="document.getElementById('returnRadioForm').submit()">
+            ✅ Enregistrer Retour
+        </button>
+        <button class="popup-button gray" onclick="showRadiosList()">
+            Annuler
+        </button>
+    `);
+}
+
+function returnRadioFromAgent(radioId, event) {
+    if (event) event.preventDefault();
+    if (!checkPassword()) return false;
+    
+    const returnDate = document.getElementById('returnDate').value;
+    const condition = document.getElementById('returnCondition').value;
+    const newStatus = document.getElementById('newStatus').value;
+    const comments = document.getElementById('returnComments').value;
+    const signature = document.getElementById('returnSignature').value;
+    
+    if (!returnDate || !condition || !newStatus) {
+        showSnackbar("⚠️ Veuillez remplir les champs obligatoires");
+        return false;
+    }
+    
+    const radioIndex = radios.findIndex(r => r.id === radioId);
+    if (radioIndex === -1) {
+        showSnackbar("⚠️ Radio non trouvée");
+        return false;
+    }
+    
+    const oldAssignedTo = radios[radioIndex].assignedTo;
+    
+    // Mettre à jour la radio
+    radios[radioIndex].status = newStatus;
+    radios[radioIndex].returnDate = returnDate;
+    radios[radioIndex].returnCondition = condition;
+    radios[radioIndex].returnComments = comments;
+    radios[radioIndex].returnSignature = signature;
+    radios[radioIndex].assignedTo = null;
+    radios[radioIndex].assignDate = null;
+    radios[radioIndex].updatedAt = new Date().toISOString();
+    
+    // Ajouter à l'historique de la radio
+    if (!radios[radioIndex].history) radios[radioIndex].history = [];
+    radios[radioIndex].history.push({
+        date: new Date().toISOString(),
+        action: 'RETOUR',
+        details: `Retournée par ${oldAssignedTo} - État: ${condition} - Nouveau statut: ${newStatus}`,
+        user: 'Admin'
+    });
+    
+    // Ajouter à l'historique global
+    if (!radioHistory) radioHistory = [];
+    radioHistory.push({
+        id: 'H' + Date.now(),
+        radioId: radioId,
+        agentCode: oldAssignedTo,
+        action: 'RETOUR',
+        date: returnDate,
+        details: `Radio retournée - État: ${condition}`,
+        comments: comments,
+        createdBy: 'Admin'
+    });
+    
+    saveData();
+    showSnackbar(`✅ Radio ${radioId} retournée avec succès`);
+    showRadiosList();
+    closePopup();
+    return false;
+}
+
+function showRadiosStatus() {
+    if (radios.length === 0) {
+        showSnackbar("ℹ️ Aucune radio enregistrée");
+        return;
+    }
+    
+    // Calculer les statistiques détaillées
+    const stats = {
+        total: radios.length,
+        disponible: radios.filter(r => r.status === 'DISPONIBLE').length,
+        attribuee: radios.filter(r => r.status === 'ATTRIBUEE').length,
+        hs: radios.filter(r => r.status === 'HS').length,
+        reparation: radios.filter(r => r.status === 'REPARATION').length,
+        perdue: radios.filter(r => r.status === 'PERDUE').length
+    };
+    
+    // Radios attribuées avec détails
+    const attributedRadios = radios.filter(r => r.status === 'ATTRIBUEE');
+    
+    let html = `
+        <div class="info-section">
+            <h3>📊 Statut des Radios</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 30px;">
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #2c3e50, #34495e); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: #3498db;">${stats.total}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Total Radios</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #27ae60, #2ecc71); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: white;">${stats.disponible}</div>
+                    <div style="font-size: 0.9em; color: white;">Disponibles</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #f39c12, #f1c40f); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: white;">${stats.attribuee}</div>
+                    <div style="font-size: 0.9em; color: white;">Attribuées</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #e74c3c, #c0392b); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: white;">${stats.hs + stats.reparation + stats.perdue}</div>
+                    <div style="font-size: 0.9em; color: white;">Indisponibles</div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                <div>
+                    <h4>📈 Répartition par statut</h4>
+                    <div style="margin-top: 15px;">
+                        ${Object.entries({
+                            'DISPONIBLE': stats.disponible,
+                            'ATTRIBUEE': stats.attribuee,
+                            'HS': stats.hs,
+                            'REPARATION': stats.reparation,
+                            'PERDUE': stats.perdue
+                        }).map(([status, count]) => {
+                            const percentage = stats.total > 0 ? ((count / stats.total) * 100).toFixed(1) : 0;
+                            const colors = {
+                                'DISPONIBLE': '#27ae60',
+                                'ATTRIBUEE': '#f39c12',
+                                'HS': '#e74c3c',
+                                'REPARATION': '#e67e22',
+                                'PERDUE': '#95a5a6'
+                            };
+                            return `
+                                <div style="margin: 10px 0;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                        <span>${status}:</span>
+                                        <span style="font-weight: bold;">${count} (${percentage}%)</span>
+                                    </div>
+                                    <div style="height: 10px; background: #34495e; border-radius: 5px; overflow: hidden;">
+                                        <div style="height: 100%; width: ${percentage}%; background: ${colors[status] || '#7f8c8d'}; border-radius: 5px;"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                
+                <div>
+                    <h4>💰 Valeur totale du parc</h4>
+                    <div style="margin-top: 15px;">
+                        ${(() => {
+                            const totalValue = radios.reduce((sum, radio) => sum + (radio.price || 0), 0);
+                            const availableValue = radios.filter(r => r.status === 'DISPONIBLE')
+                                .reduce((sum, radio) => sum + (radio.price || 0), 0);
+                            const attributedValue = radios.filter(r => r.status === 'ATTRIBUEE')
+                                .reduce((sum, radio) => sum + (radio.price || 0), 0);
+                            
+                            return `
+                                <div style="text-align: center; padding: 20px; background: #2c3e50; border-radius: 8px; margin-bottom: 15px;">
+                                    <div style="font-size: 2em; font-weight: bold; color: #f39c12;">
+                                        ${totalValue.toLocaleString('fr-FR')} DH
+                                    </div>
+                                    <div style="font-size: 0.9em; color: #bdc3c7;">Valeur totale</div>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                    <div style="text-align: center; padding: 10px; background: #27ae60; border-radius: 5px;">
+                                        <div style="font-weight: bold; color: white;">${availableValue.toLocaleString('fr-FR')} DH</div>
+                                        <div style="font-size: 0.8em; color: white;">Disponibles</div>
+                                    </div>
+                                    <div style="text-align: center; padding: 10px; background: #f39c12; border-radius: 5px;">
+                                        <div style="font-weight: bold; color: white;">${attributedValue.toLocaleString('fr-FR')} DH</div>
+                                        <div style="font-size: 0.8em; color: white;">Attribuées</div>
+                                    </div>
+                                </div>
+                            `;
+                        })()}
+                    </div>
+                </div>
+            </div>
+            
+            ${attributedRadios.length > 0 ? `
+                <h4>📱 Radios actuellement attribuées</h4>
+                <div style="margin-top: 15px;">
+                    <table class="classement-table">
+                        <thead>
+                            <tr>
+                                <th>Radio</th>
+                                <th>Agent</th>
+                                <th>Date attribution</th>
+                                <th>Motif</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${attributedRadios.map(radio => {
+                                const agent = agents.find(a => a.code === radio.assignedTo);
+                                const agentName = agent ? `${agent.nom} ${agent.prenom}` : radio.assignedTo;
+                                return `
+                                    <tr>
+                                        <td><strong>${radio.id}</strong><br><small>${radio.model}</small></td>
+                                        <td>${agentName}<br><small>${radio.assignedTo}</small></td>
+                                        <td>${radio.assignDate ? new Date(radio.assignDate).toLocaleDateString('fr-FR') : '-'}</td>
+                                        <td>${radio.assignReason || 'Service normal'}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : ''}
+            
+            <div style="margin-top: 30px; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                <h4 style="margin-top: 0;">📋 Recommandations</h4>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    ${stats.disponible < 2 ? '<li style="color:#e74c3c;">⚠️ Stock critique: Moins de 2 radios disponibles</li>' : ''}
+                    ${stats.hs > 3 ? '<li style="color:#e74c3c;">⚠️ Plusieurs radios HS nécessitent réparation</li>' : ''}
+                    ${stats.attribuee > stats.disponible ? '<li style="color:#f39c12;">ℹ️ Plus de radios attribuées que disponibles</li>' : ''}
+                    ${stats.disponible >= 5 ? '<li style="color:#27ae60;">✅ Stock suffisant</li>' : ''}
+                </ul>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📊 Statut des Radios", html, `
+        <button class="popup-button blue" onclick="exportRadioReport()">
+            📤 Exporter Rapport
+        </button>
+        <button class="popup-button gray" onclick="showRadiosList()">
+            Retour
+        </button>
+    `);
+}
+
+function showRadiosHistory() {
+    if ((!radioHistory || radioHistory.length === 0) && radios.every(r => !r.history || r.history.length === 0)) {
+        showSnackbar("ℹ️ Aucun historique disponible");
+        return;
+    }
+    
+    let html = `
+        <div class="info-section">
+            <h3>📋 Historique des Radios</h3>
+            <div style="margin-bottom: 15px;">
+                <select id="historyFilter" class="form-input" onchange="filterRadioHistory()" style="width: auto;">
+                    <option value="all">Tous les événements</option>
+                    <option value="ATTRIBUTION">Attributions</option>
+                    <option value="RETOUR">Retours</option>
+                    <option value="STATUT_CHANGE">Changements de statut</option>
+                    <option value="CREATION">Créations</option>
+                </select>
+                <select id="historyRadioFilter" class="form-input" onchange="filterRadioHistory()" style="width: auto; margin-left: 10px;">
+                    <option value="all">Toutes les radios</option>
+                    ${radios.map(r => `<option value="${r.id}">${r.id}</option>`).join('')}
+                </select>
+            </div>
+            <div id="radioHistoryContainer" style="max-height: 500px; overflow-y: auto;">
+                ${generateRadioHistory()}
+            </div>
+        </div>
+    `;
+    
+    openPopup("📋 Historique des Radios", html, `
+        <button class="popup-button blue" onclick="exportRadioHistory()">
+            📤 Exporter Historique
+        </button>
+        <button class="popup-button gray" onclick="showRadiosList()">
+            Retour
+        </button>
+    `);
+}
+
+function generateRadioHistory(filterType = 'all', filterRadio = 'all') {
+    // Collecter tous les événements d'historique
+    let allEvents = [];
+    
+    // Événements globaux
+    if (radioHistory && radioHistory.length > 0) {
+        radioHistory.forEach(event => {
+            allEvents.push({
+                ...event,
+                source: 'global'
+            });
+        });
+    }
+    
+    // Événements par radio
+    radios.forEach(radio => {
+        if (radio.history && radio.history.length > 0) {
+            radio.history.forEach(event => {
+                allEvents.push({
+                    ...event,
+                    radioId: radio.id,
+                    source: 'radio'
+                });
+            });
+        }
+    });
+    
+    // Trier par date (du plus récent au plus ancien)
+    allEvents.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+    
+    // Appliquer les filtres
+    let filteredEvents = allEvents;
+    if (filterType !== 'all') {
+        filteredEvents = filteredEvents.filter(event => 
+            event.action === filterType || event.type === filterType
+        );
+    }
+    if (filterRadio !== 'all') {
+        filteredEvents = filteredEvents.filter(event => 
+            event.radioId === filterRadio
+        );
+    }
+    
+    if (filteredEvents.length === 0) {
+        return '<p style="text-align:center; color:#7f8c8d; padding:20px;">Aucun événement trouvé</p>';
+    }
+    
+    return `
+        <table class="classement-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Radio</th>
+                    <th>Événement</th>
+                    <th>Agent</th>
+                    <th>Détails</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${filteredEvents.map(event => {
+                    const eventDate = event.date || event.createdAt;
+                    const eventType = event.action || event.type;
+                    const eventDetails = event.details || event.comments || '';
+                    const agentCode = event.agentCode || event.assignedTo || '';
+                    const agent = agentCode ? agents.find(a => a.code === agentCode) : null;
+                    const agentName = agent ? `${agent.nom} ${agent.prenom}` : agentCode;
+                    
+                    let eventColor = '#7f8c8d';
+                    let eventLabel = eventType;
+                    switch(eventType) {
+                        case 'ATTRIBUTION': eventColor = '#f39c12'; eventLabel = '📲 Attribution'; break;
+                        case 'RETOUR': eventColor = '#3498db'; eventLabel = '🔄 Retour'; break;
+                        case 'STATUT_CHANGE': eventColor = '#9b59b6'; eventLabel = '🔄 Changement statut'; break;
+                        case 'CREATION': eventColor = '#27ae60'; eventLabel = '➕ Création'; break;
+                    }
+                    
+                    return `
+                        <tr>
+                            <td nowrap>${new Date(eventDate).toLocaleString('fr-FR')}</td>
+                            <td><strong>${event.radioId || '-'}</strong></td>
+                            <td>
+                                <span style="background-color:${eventColor}; color:white; padding:2px 8px; border-radius:12px; font-size:0.8em;">
+                                    ${eventLabel}
+                                </span>
+                            </td>
+                            <td>${agentName || '-'}</td>
+                            <td>${eventDetails.substring(0, 50)}${eventDetails.length > 50 ? '...' : ''}</td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function filterRadioHistory() {
+    const filterType = document.getElementById('historyFilter').value;
+    const filterRadio = document.getElementById('historyRadioFilter').value;
+    document.getElementById('radioHistoryContainer').innerHTML = generateRadioHistory(filterType, filterRadio);
+}
+
+function deleteRadioConfirm(radioId) {
+    if (!checkPassword()) return;
+    
+    const radio = radios.find(r => r.id === radioId);
+    if (!radio) return;
+    
+    if (confirm(`Êtes-vous sûr de vouloir supprimer la radio ${radioId} (${radio.model}) ?\n\n⚠️ Cette action est irréversible et supprimera également tout l'historique associé.`)) {
+        deleteRadio(radioId);
+    }
+}
+
+function deleteRadio(radioId) {
+    if (!checkPassword()) return;
+    
+    const radioIndex = radios.findIndex(r => r.id === radioId);
+    if (radioIndex === -1) {
+        showSnackbar("⚠️ Radio non trouvée");
+        return;
+    }
+    
+    // Supprimer la radio
+    radios.splice(radioIndex, 1);
+    
+    // Supprimer l'historique associé
+    radioHistory = radioHistory.filter(h => h.radioId !== radioId);
+    
+    saveData();
+    showSnackbar(`✅ Radio ${radioId} supprimée avec succès`);
+    showRadiosList();
+}
+
+function exportRadioReport() {
+    if (radios.length === 0) {
+        showSnackbar("ℹ️ Aucune radio à exporter");
+        return;
+    }
+    
+    let csvContent = "Rapport des Radios - " + new Date().toLocaleDateString('fr-FR') + "\n\n";
+    csvContent += "ID Radio;Modèle;Numéro Série;Statut;Date Acquisition;Prix (DH);Fournisseur;Attribuée à;Date Attribution;Commentaires\n";
+    
+    radios.forEach(radio => {
+        csvContent += `${radio.id};${radio.model};${radio.serial || ''};${radio.status};`;
+        csvContent += `${radio.acquisitionDate || ''};${radio.price || ''};${radio.supplier || ''};`;
+        csvContent += `${radio.assignedTo || ''};${radio.assignDate || ''};"${radio.comments || ''}"\n`;
+    });
+    
+    const filename = `Rapport_Radios_${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCSV(csvContent, filename);
+    showSnackbar(`✅ Rapport des radios téléchargé`);
+}
+
+function exportRadioHistory() {
+    if ((!radioHistory || radioHistory.length === 0) && radios.every(r => !r.history || r.history.length === 0)) {
+        showSnackbar("ℹ️ Aucun historique à exporter");
+        return;
+    }
+    
+    let csvContent = "Historique des Radios - " + new Date().toLocaleDateString('fr-FR') + "\n\n";
+    csvContent += "Date;Radio;Événement;Agent;Détails\n";
+    
+    // Collecter tous les événements
+    let allEvents = [];
+    
+    if (radioHistory && radioHistory.length > 0) {
+        radioHistory.forEach(event => {
+            allEvents.push({
+                date: event.date || event.createdAt,
+                radioId: event.radioId,
+                action: event.action,
+                agentCode: event.agentCode,
+                details: event.details || event.comments || ''
+            });
+        });
+    }
+    
+    radios.forEach(radio => {
+        if (radio.history && radio.history.length > 0) {
+            radio.history.forEach(event => {
+                allEvents.push({
+                    date: event.date,
+                    radioId: radio.id,
+                    action: event.action,
+                    agentCode: event.assignedTo || '',
+                    details: event.details || ''
+                });
+            });
+        }
+    });
+    
+    // Trier par date
+    allEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    allEvents.forEach(event => {
+        const agent = event.agentCode ? agents.find(a => a.code === event.agentCode) : null;
+        const agentName = agent ? `${agent.nom} ${agent.prenom}` : event.agentCode;
+        csvContent += `${new Date(event.date).toLocaleString('fr-FR')};${event.radioId || ''};${event.action};"${agentName || ''}";"${event.details}"\n`;
+    });
+    
+    const filename = `Historique_Radios_${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCSV(csvContent, filename);
+    showSnackbar(`✅ Historique des radios téléchargé`);
+}
+
+function filterRadioList() {
+    const searchTerm = document.getElementById('searchRadioList').value.toLowerCase();
+    const filteredRadios = radios.filter(radio => 
+        radio.id.toLowerCase().includes(searchTerm) ||
+        radio.model.toLowerCase().includes(searchTerm) ||
+        radio.serial.toLowerCase().includes(searchTerm) ||
+        radio.status.toLowerCase().includes(searchTerm)
+    );
+    
+    document.getElementById('radioListContainer').innerHTML = `
+        ${(() => {
+            if (filteredRadios.length === 0) {
+                return '<p style="text-align:center; color:#7f8c8d; padding:20px;">Aucune radio trouvée</p>';
+            }
+            
+            const stats = {
+                total: filteredRadios.length,
+                disponible: filteredRadios.filter(r => r.status === 'DISPONIBLE').length,
+                attribuee: filteredRadios.filter(r => r.status === 'ATTRIBUEE').length,
+                hs: filteredRadios.filter(r => r.status === 'HS').length,
+                reparation: filteredRadios.filter(r => r.status === 'REPARATION').length,
+                perdue: filteredRadios.filter(r => r.status === 'PERDUE').length
+            };
+            
+            return `
+                <div style="margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px;">
+                        <div style="text-align: center; padding: 10px; background: #2c3e50; border-radius: 5px;">
+                            <div style="font-size: 1.5em; font-weight: bold; color: #3498db;">${stats.total}</div>
+                            <div style="font-size: 0.9em; color: #bdc3c7;">Total</div>
+                        </div>
+                        <div style="text-align: center; padding: 10px; background: #27ae60; border-radius: 5px;">
+                            <div style="font-size: 1.5em; font-weight: bold; color: white;">${stats.disponible}</div>
+                            <div style="font-size: 0.9em; color: white;">Disponibles</div>
+                        </div>
+                        <div style="text-align: center; padding: 10px; background: #f39c12; border-radius: 5px;">
+                            <div style="font-size: 1.5em; font-weight: bold; color: white;">${stats.attribuee}</div>
+                            <div style="font-size: 0.9em; color: white;">Attribuées</div>
+                        </div>
+                        <div style="text-align: center; padding: 10px; background: #e74c3c; border-radius: 5px;">
+                            <div style="font-size: 1.5em; font-weight: bold; color: white;">${stats.hs + stats.reparation + stats.perdue}</div>
+                            <div style="font-size: 0.9em; color: white;">Indisponibles</div>
+                        </div>
+                    </div>
+                </div>
+                <table class="classement-table">
+                    <thead>
+                        <tr>
+                            <th>ID Radio</th>
+                            <th>Modèle</th>
+                            <th>Numéro Série</th>
+                            <th>Statut</th>
+                            <th>Date Acquisition</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filteredRadios.map(radio => {
+                            const statusColors = {
+                                'DISPONIBLE': '#27ae60',
+                                'ATTRIBUEE': '#f39c12',
+                                'HS': '#e74c3c',
+                                'REPARATION': '#e67e22',
+                                'PERDUE': '#95a5a6'
+                            };
+                            return `
+                                <tr>
+                                    <td><strong>${radio.id}</strong></td>
+                                    <td>${radio.model}</td>
+                                    <td>${radio.serial || '-'}</td>
+                                    <td>
+                                        <span style="background-color:${statusColors[radio.status] || '#7f8c8d'}; 
+                                              color:white; padding:3px 8px; border-radius:12px; font-size:0.8em;">
+                                            ${radio.status}
+                                        </span>
+                                    </td>
+                                    <td>${radio.acquisitionDate ? new Date(radio.acquisitionDate).toLocaleDateString('fr-FR') : '-'}</td>
+                                    <td style="white-space: nowrap;">
+                                        <button class="action-btn small blue" onclick="showEditRadioForm('${radio.id}')" title="Modifier">
+                                            ✏️
+                                        </button>
+                                        ${radio.status === 'DISPONIBLE' ? 
+                                            `<button class="action-btn small green" onclick="showAssignRadioForm('${radio.id}')" title="Attribuer">
+                                                📲
+                                            </button>` : ''}
+                                        ${radio.status === 'ATTRIBUEE' ? 
+                                            `<button class="action-btn small orange" onclick="showReturnRadioForm('${radio.id}')" title="Retourner">
+                                                🔄
+                                            </button>` : ''}
+                                        <button class="action-btn small red" onclick="deleteRadioConfirm('${radio.id}')" title="Supprimer">
+                                            🗑️
+                                        </button>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        })()}
+    `;
+}
+
+function filterRadiosEdit() {
+    const searchTerm = document.getElementById('searchRadioEdit').value.toLowerCase();
+    const filteredRadios = radios.filter(radio => 
+        radio.id.toLowerCase().includes(searchTerm) ||
+        radio.model.toLowerCase().includes(searchTerm) ||
+        radio.status.toLowerCase().includes(searchTerm)
+    );
+    
+    document.getElementById('radioEditList').innerHTML = `
+        ${filteredRadios.length === 0 ? 
+            '<p style="text-align:center; color:#7f8c8d; padding:20px;">Aucune radio trouvée</p>' :
+            `
+            <table class="classement-table">
+                <thead>
+                    <tr>
+                        <th>ID Radio</th>
+                        <th>Modèle</th>
+                        <th>Statut</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${filteredRadios.map(radio => `
+                        <tr>
+                            <td><strong>${radio.id}</strong></td>
+                            <td>${radio.model}</td>
+                            <td>
+                                <span class="status-badge ${getRadioStatusClass(radio.status)}">
+                                    ${radio.status}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="popup-button small blue" onclick="showEditRadioForm('${radio.id}')">
+                                    ✏️ Modifier
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+            `
+        }
+    `;
+}
+
+// === MODULE HABILLEMENT - FONCTIONS IMPLÉMENTÉES ===
+
+function showAddUniformForm() {
+    if (!checkPassword()) return;
+    
+    let html = `
+        <div class="info-section">
+            <h3>👔 Enregistrer un Équipement d'Habillement</h3>
+            <form id="addUniformForm" onsubmit="return saveNewUniform(event)">
+                <div class="form-group">
+                    <label>Agent *</label>
+                    <select id="uniformAgent" class="form-input" required>
+                        <option value="">Sélectionner un agent</option>
+                        ${agents.filter(a => a.statut === 'actif').map(agent => `
+                            <option value="${agent.code}">
+                                ${agent.nom} ${agent.prenom} (${agent.code}) - Groupe ${agent.groupe}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+                
+                <div style="background: #34495e; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <h4 style="margin-top: 0;">Chemise</h4>
+                    <div class="form-group">
+                        <label>Taille *</label>
+                        <select id="uniformShirtSize" class="form-input" required>
+                            <option value="">Sélectionner</option>
+                            <option value="XS">XS</option>
+                            <option value="S">S</option>
+                            <option value="M">M</option>
+                            <option value="L">L</option>
+                            <option value="XL">XL</option>
+                            <option value="XXL">XXL</option>
+                            <option value="XXXL">XXXL</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Date de fourniture *</label>
+                        <input type="date" id="uniformShirtDate" class="form-input" required 
+                               value="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                    <div class="form-group">
+                        <label>État</label>
+                        <select id="uniformShirtCondition" class="form-input">
+                            <option value="NEUF">Neuf</option>
+                            <option value="BON">Bon état</option>
+                            <option value="USAGE">Usé</option>
+                            <option value="MAUVAIS">Mauvais état</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="background: #34495e; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <h4 style="margin-top: 0;">Pantalon</h4>
+                    <div class="form-group">
+                        <label>Taille *</label>
+                        <select id="uniformPantsSize" class="form-input" required>
+                            <option value="">Sélectionner</option>
+                            ${Array.from({length: 20}, (_, i) => 36 + i).map(size => `
+                                <option value="${size}">${size}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Date de fourniture *</label>
+                        <input type="date" id="uniformPantsDate" class="form-input" required 
+                               value="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                    <div class="form-group">
+                        <label>État</label>
+                        <select id="uniformPantsCondition" class="form-input">
+                            <option value="NEUF">Neuf</option>
+                            <option value="BON">Bon état</option>
+                            <option value="USAGE">Usé</option>
+                            <option value="MAUVAIS">Mauvais état</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="background: #34495e; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <h4 style="margin-top: 0;">Veste/Jacket</h4>
+                    <div class="form-group">
+                        <label>Taille</label>
+                        <select id="uniformJacketSize" class="form-input">
+                            <option value="">Non fourni</option>
+                            <option value="XS">XS</option>
+                            <option value="S">S</option>
+                            <option value="M">M</option>
+                            <option value="L">L</option>
+                            <option value="XL">XL</option>
+                            <option value="XXL">XXL</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Date de fourniture</label>
+                        <input type="date" id="uniformJacketDate" class="form-input">
+                    </div>
+                </div>
+                
+                <div style="background: #34495e; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <h4 style="margin-top: 0;">Accessoires</h4>
+                    <div class="form-group">
+                        <label>Cravate</label>
+                        <div>
+                            <label style="margin-right: 20px;">
+                                <input type="radio" name="uniformTie" value="true" checked> Oui
+                            </label>
+                            <label>
+                                <input type="radio" name="uniformTie" value="false"> Non
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Date fourniture cravate</label>
+                        <input type="date" id="uniformTieDate" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Chaussures (pointure)</label>
+                        <input type="number" id="uniformShoesSize" class="form-input" 
+                               min="35" max="50" step="0.5" placeholder="Ex: 42">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Commentaires</label>
+                    <textarea id="uniformComments" class="form-input" rows="3" 
+                              placeholder="Remarques sur l'habillement..."></textarea>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    openPopup("👔 Enregistrer Habillement", html, `
+        <button class="popup-button green" onclick="document.getElementById('addUniformForm').submit()">
+            💾 Enregistrer
+        </button>
+        <button class="popup-button gray" onclick="showUniformReport()">
+            Annuler
+        </button>
+    `);
+}
+
+function saveNewUniform(event) {
+    if (event) event.preventDefault();
+    if (!checkPassword()) return false;
+    
+    const agentCode = document.getElementById('uniformAgent').value;
+    const shirtSize = document.getElementById('uniformShirtSize').value;
+    const shirtDate = document.getElementById('uniformShirtDate').value;
+    const shirtCondition = document.getElementById('uniformShirtCondition').value;
+    const pantsSize = document.getElementById('uniformPantsSize').value;
+    const pantsDate = document.getElementById('uniformPantsDate').value;
+    const pantsCondition = document.getElementById('uniformPantsCondition').value;
+    const jacketSize = document.getElementById('uniformJacketSize').value;
+    const jacketDate = document.getElementById('uniformJacketDate').value;
+    const hasTie = document.querySelector('input[name="uniformTie"]:checked').value === 'true';
+    const tieDate = document.getElementById('uniformTieDate').value;
+    const shoesSize = document.getElementById('uniformShoesSize').value;
+    const comments = document.getElementById('uniformComments').value;
+    
+    if (!agentCode || !shirtSize || !shirtDate || !pantsSize || !pantsDate) {
+        showSnackbar("⚠️ Veuillez remplir les champs obligatoires");
+        return false;
+    }
+    
+    const agent = agents.find(a => a.code === agentCode);
+    if (!agent) {
+        showSnackbar("⚠️ Agent non trouvé");
+        return false;
+    }
+    
+    // Vérifier si l'agent a déjà un habillement enregistré
+    const existingIndex = uniforms.findIndex(u => u.agentCode === agentCode);
+    
+    const uniformData = {
+        agentCode: agentCode,
+        agentName: `${agent.nom} ${agent.prenom}`,
+        agentGroup: agent.groupe,
+        shirt: {
+            size: shirtSize,
+            date: shirtDate,
+            condition: shirtCondition || 'NEUF',
+            needsReplacement: false
+        },
+        pants: {
+            size: pantsSize,
+            date: pantsDate,
+            condition: pantsCondition || 'NEUF',
+            needsReplacement: false
+        },
+        jacket: jacketSize ? {
+            size: jacketSize,
+            date: jacketDate || shirtDate,
+            condition: 'NEUF'
+        } : null,
+        accessories: {
+            tie: hasTie,
+            tieDate: tieDate || shirtDate,
+            shoesSize: shoesSize || null
+        },
+        comments: comments || '',
+        lastUpdated: new Date().toISOString(),
+        created: existingIndex === -1 ? new Date().toISOString() : uniforms[existingIndex].created
+    };
+    
+    // Vérifier si besoin de renouvellement (plus de 2 ans)
+    const checkDate = (dateStr) => {
+        const date = new Date(dateStr);
+        const twoYearsAgo = new Date();
+        twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+        return date < twoYearsAgo;
+    };
+    
+    uniformData.shirt.needsReplacement = checkDate(shirtDate);
+    uniformData.pants.needsReplacement = checkDate(pantsDate);
+    
+    if (existingIndex === -1) {
+        uniforms.push(uniformData);
+        showSnackbar(`✅ Habillement enregistré pour ${agentCode}`);
+    } else {
+        uniforms[existingIndex] = uniformData;
+        showSnackbar(`✅ Habillement mis à jour pour ${agentCode}`);
+    }
+    
+    saveData();
+    showUniformReport();
+    closePopup();
+    return false;
+}
+
+function showEditUniformList() {
+    if (!checkPassword()) return;
+    
+    let html = `
+        <div class="info-section">
+            <h3>✏️ Modifier l'Habillement</h3>
+            <div style="margin-bottom: 15px;">
+                <input type="text" id="searchUniformEdit" placeholder="Rechercher agent..." 
+                       class="form-input" style="width: 100%;"
+                       onkeyup="filterUniformsEdit()">
+            </div>
+            <div id="uniformEditList" style="max-height: 400px; overflow-y: auto;">
+                ${generateUniformEditList()}
+            </div>
+        </div>
+    `;
+    
+    openPopup("✏️ Modifier Habillement", html, `
+        <button class="popup-button green" onclick="showAddUniformForm()">
+            ➕ Nouvel enregistrement
+        </button>
+        <button class="popup-button gray" onclick="showUniformReport()">
+            Retour
+        </button>
+    `);
+}
+
+function generateUniformEditList() {
+    if (uniforms.length === 0) {
+        return '<p style="text-align:center; color:#7f8c8d; padding:20px;">Aucun habillement enregistré</p>';
+    }
+    
+    return `
+        <table class="classement-table">
+            <thead>
+                <tr>
+                    <th>Agent</th>
+                    <th>Chemise</th>
+                    <th>Pantalon</th>
+                    <th>Dernière mise à jour</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${uniforms.map(uniform => {
+                    const needsReplacement = uniform.shirt.needsReplacement || uniform.pants.needsReplacement;
+                    return `
+                        <tr>
+                            <td>
+                                <strong>${uniform.agentName}</strong><br>
+                                <small>${uniform.agentCode} - Groupe ${uniform.agentGroup}</small>
+                            </td>
+                            <td>${uniform.shirt.size}<br>
+                                <small>${new Date(uniform.shirt.date).toLocaleDateString('fr-FR')}</small>
+                                ${uniform.shirt.needsReplacement ? '<br><span style="color:#e74c3c; font-size:0.8em;">⚠️ À renouveler</span>' : ''}
+                            </td>
+                            <td>${uniform.pants.size}<br>
+                                <small>${new Date(uniform.pants.date).toLocaleDateString('fr-FR')}</small>
+                                ${uniform.pants.needsReplacement ? '<br><span style="color:#e74c3c; font-size:0.8em;">⚠️ À renouveler</span>' : ''}
+                            </td>
+                            <td>${new Date(uniform.lastUpdated).toLocaleDateString('fr-FR')}</td>
+                            <td>
+                                <button class="action-btn small blue" onclick="editUniform('${uniform.agentCode}')">
+                                    ✏️ Modifier
+                                </button>
+                                <button class="action-btn small red" onclick="deleteUniformConfirm('${uniform.agentCode}')">
+                                    🗑️ Supprimer
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function editUniform(agentCode) {
+    if (!checkPassword()) return;
+    
+    const uniform = uniforms.find(u => u.agentCode === agentCode);
+    if (!uniform) {
+        showSnackbar("⚠️ Habillement non trouvé");
+        return;
+    }
+    
+    // Pré-remplir le formulaire d'édition
+    showAddUniformForm();
+    
+    // Attendre que le formulaire soit chargé
+    setTimeout(() => {
+        document.getElementById('uniformAgent').value = uniform.agentCode;
+        document.getElementById('uniformShirtSize').value = uniform.shirt.size;
+        document.getElementById('uniformShirtDate').value = uniform.shirt.date;
+        document.getElementById('uniformShirtCondition').value = uniform.shirt.condition;
+        document.getElementById('uniformPantsSize').value = uniform.pants.size;
+        document.getElementById('uniformPantsDate').value = uniform.pants.date;
+        document.getElementById('uniformPantsCondition').value = uniform.pants.condition;
+        
+        if (uniform.jacket) {
+            document.getElementById('uniformJacketSize').value = uniform.jacket.size;
+            document.getElementById('uniformJacketDate').value = uniform.jacket.date;
+        }
+        
+        document.querySelector(`input[name="uniformTie"][value="${uniform.accessories.tie}"]`).checked = true;
+        document.getElementById('uniformTieDate').value = uniform.accessories.tieDate;
+        document.getElementById('uniformShoesSize').value = uniform.accessories.shoesSize;
+        document.getElementById('uniformComments').value = uniform.comments;
+    }, 100);
+}
+
+function deleteUniformConfirm(agentCode) {
+    if (!checkPassword()) return;
+    
+    const uniform = uniforms.find(u => u.agentCode === agentCode);
+    if (!uniform) return;
+    
+    if (confirm(`Êtes-vous sûr de vouloir supprimer l'habillement de ${uniform.agentName} (${agentCode}) ?\n\n⚠️ Cette action est irréversible.`)) {
+        deleteUniform(agentCode);
+    }
+}
+
+function deleteUniform(agentCode) {
+    if (!checkPassword()) return;
+    
+    const uniformIndex = uniforms.findIndex(u => u.agentCode === agentCode);
+    if (uniformIndex === -1) {
+        showSnackbar("⚠️ Habillement non trouvé");
+        return;
+    }
+    
+    uniforms.splice(uniformIndex, 1);
+    saveData();
+    showSnackbar(`✅ Habillement supprimé pour ${agentCode}`);
+    showEditUniformList();
+}
+
+function showUniformReport() {
+    if (uniforms.length === 0) {
+        let html = `
+            <div class="info-section">
+                <h3>👔 Rapport d'Habillement</h3>
+                <p style="text-align:center; color:#7f8c8d; padding:40px;">
+                    Aucun habillement enregistré.<br>
+                    Commencez par enregistrer l'habillement des agents.
+                </p>
+            </div>
+        `;
+        
+        openPopup("👔 Rapport Habillement", html, `
+            <button class="popup-button green" onclick="showAddUniformForm()">
+                ➕ Enregistrer
+            </button>
+            <button class="popup-button gray" onclick="displayUniformMenu()">
+                Retour
+            </button>
+        `);
+        return;
+    }
+    
+    // Calculer les statistiques
+    const stats = {
+        total: uniforms.length,
+        needsReplacement: uniforms.filter(u => u.shirt.needsReplacement || u.pants.needsReplacement).length,
+        shirtSizes: {},
+        pantsSizes: {}
+    };
+    
+    uniforms.forEach(uniform => {
+        // Tailles de chemise
+        stats.shirtSizes[uniform.shirt.size] = (stats.shirtSizes[uniform.shirt.size] || 0) + 1;
+        
+        // Tailles de pantalon
+        stats.pantsSizes[uniform.pants.size] = (stats.pantsSizes[uniform.pants.size] || 0) + 1;
+    });
+    
+    // Agents avec habillement à renouveler
+    const agentsToRenew = uniforms.filter(u => u.shirt.needsReplacement || u.pants.needsReplacement);
+    
+    let html = `
+        <div class="info-section">
+            <h3>👔 Rapport d'Habillement</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 30px;">
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #2c3e50, #34495e); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: #3498db;">${stats.total}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Agents équipés</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #27ae60, #2ecc71); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: white;">${stats.total - stats.needsReplacement}</div>
+                    <div style="font-size: 0.9em; color: white;">À jour</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #f39c12, #f1c40f); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: white;">${stats.needsReplacement}</div>
+                    <div style="font-size: 0.9em; color: white;">À renouveler</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #e74c3c, #c0392b); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: white;">
+                        ${agents.filter(a => a.statut === 'actif').length - stats.total}
+                    </div>
+                    <div style="font-size: 0.9em; color: white;">Non équipés</div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                <div>
+                    <h4>📏 Répartition des tailles - Chemises</h4>
+                    <div style="margin-top: 15px;">
+                        ${Object.entries(stats.shirtSizes)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([size, count]) => {
+                                const percentage = ((count / stats.total) * 100).toFixed(1);
+                                return `
+                                    <div style="margin: 10px 0;">
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                            <span>Taille ${size}:</span>
+                                            <span style="font-weight: bold;">${count} (${percentage}%)</span>
+                                        </div>
+                                        <div style="height: 10px; background: #34495e; border-radius: 5px; overflow: hidden;">
+                                            <div style="height: 100%; width: ${percentage}%; background: #3498db; border-radius: 5px;"></div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                    </div>
+                </div>
+                
+                <div>
+                    <h4>📏 Répartition des tailles - Pantalons</h4>
+                    <div style="margin-top: 15px;">
+                        ${Object.entries(stats.pantsSizes)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([size, count]) => {
+                                const percentage = ((count / stats.total) * 100).toFixed(1);
+                                return `
+                                    <div style="margin: 10px 0;">
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                            <span>Taille ${size}:</span>
+                                            <span style="font-weight: bold;">${count} (${percentage}%)</span>
+                                        </div>
+                                        <div style="height: 10px; background: #34495e; border-radius: 5px; overflow: hidden;">
+                                            <div style="height: 100%; width: ${percentage}%; background: #9b59b6; border-radius: 5px;"></div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                    </div>
+                </div>
+            </div>
+            
+            ${agentsToRenew.length > 0 ? `
+                <h4>⚠️ Agents avec habillement à renouveler</h4>
+                <div style="margin-top: 15px;">
+                    <table class="classement-table">
+                        <thead>
+                            <tr>
+                                <th>Agent</th>
+                                <th>Équipement à renouveler</th>
+                                <th>Dernière fourniture</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${agentsToRenew.map(uniform => {
+                                const renewItems = [];
+                                if (uniform.shirt.needsReplacement) {
+                                    renewItems.push(`Chemise (${uniform.shirt.size})`);
+                                }
+                                if (uniform.pants.needsReplacement) {
+                                    renewItems.push(`Pantalon (${uniform.pants.size})`);
+                                }
+                                
+                                const lastDate = new Date(Math.max(
+                                    new Date(uniform.shirt.date),
+                                    new Date(uniform.pants.date)
+                                ));
+                                
+                                return `
+                                    <tr>
+                                        <td>
+                                            <strong>${uniform.agentName}</strong><br>
+                                            <small>${uniform.agentCode}</small>
+                                        </td>
+                                        <td>${renewItems.join(', ')}</td>
+                                        <td>${lastDate.toLocaleDateString('fr-FR')}</td>
+                                        <td>
+                                            <button class="action-btn small blue" onclick="editUniform('${uniform.agentCode}')">
+                                                ✏️ Mettre à jour
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : ''}
+            
+            <div style="margin-top: 30px;">
+                <button class="popup-button orange" onclick="showUniformDeadlines()">
+                    📅 Voir les échéances
+                </button>
+                <button class="popup-button blue" onclick="showUniformStats()">
+                    📊 Statistiques détaillées
+                </button>
+            </div>
+        </div>
+    `;
+    
+    openPopup("👔 Rapport Habillement", html, `
+        <button class="popup-button green" onclick="showAddUniformForm()">
+            ➕ Nouvel enregistrement
+        </button>
+        <button class="popup-button blue" onclick="exportUniformReport()">
+            📤 Exporter Rapport
+        </button>
+        <button class="popup-button gray" onclick="displayUniformMenu()">
+            Retour
+        </button>
+    `);
+}
+
+function showUniformStats() {
+    if (uniforms.length === 0) {
+        showSnackbar("ℹ️ Aucune donnée d'habillement disponible");
+        return;
+    }
+    
+    // Statistiques détaillées
+    const stats = {
+        byGroup: {},
+        byShirtSize: {},
+        byPantsSize: {},
+        conditions: {
+            shirt: { NEUF: 0, BON: 0, USAGE: 0, MAUVAIS: 0 },
+            pants: { NEUF: 0, BON: 0, USAGE: 0, MAUVAIS: 0 }
+        },
+        renewalNeeded: {
+            shirt: uniforms.filter(u => u.shirt.needsReplacement).length,
+            pants: uniforms.filter(u => u.pants.needsReplacement).length
+        }
+    };
+    
+    uniforms.forEach(uniform => {
+        // Par groupe
+        stats.byGroup[uniform.agentGroup] = (stats.byGroup[uniform.agentGroup] || 0) + 1;
+        
+        // Tailles de chemise
+        stats.byShirtSize[uniform.shirt.size] = (stats.byShirtSize[uniform.shirt.size] || 0) + 1;
+        
+        // Tailles de pantalon
+        stats.byPantsSize[uniform.pants.size] = (stats.byPantsSize[uniform.pants.size] || 0) + 1;
+        
+        // État des équipements
+        stats.conditions.shirt[uniform.shirt.condition] = (stats.conditions.shirt[uniform.shirt.condition] || 0) + 1;
+        stats.conditions.pants[uniform.pants.condition] = (stats.conditions.pants[uniform.pants.condition] || 0) + 1;
+    });
+    
+    let html = `
+        <div class="info-section">
+            <h3>📊 Statistiques d'Habillement</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
+                <div style="text-align: center; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: #3498db;">${uniforms.length}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Dossiers complets</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: #e74c3c; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${stats.renewalNeeded.shirt}</div>
+                    <div style="font-size: 0.9em; color: white;">Chemises à renouveler</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: #9b59b6; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${stats.renewalNeeded.pants}</div>
+                    <div style="font-size: 0.9em; color: white;">Pantalons à renouveler</div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                <div>
+                    <h4>👥 Répartition par groupe</h4>
+                    <div style="margin-top: 15px;">
+                        ${Object.entries(stats.byGroup)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([group, count]) => {
+                                const percentage = ((count / uniforms.length) * 100).toFixed(1);
+                                return `
+                                    <div style="margin: 10px 0;">
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                            <span>Groupe ${group}:</span>
+                                            <span style="font-weight: bold;">${count} (${percentage}%)</span>
+                                        </div>
+                                        <div style="height: 10px; background: #34495e; border-radius: 5px; overflow: hidden;">
+                                            <div style="height: 100%; width: ${percentage}%; background: #f39c12; border-radius: 5px;"></div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                    </div>
+                </div>
+                
+                <div>
+                    <h4>📈 État des équipements</h4>
+                    <div style="margin-top: 15px;">
+                        <h5>Chemises</h5>
+                        ${Object.entries(stats.conditions.shirt).map(([condition, count]) => {
+                            const percentage = ((count / uniforms.length) * 100).toFixed(1);
+                            const colors = {
+                                'NEUF': '#27ae60',
+                                'BON': '#3498db',
+                                'USAGE': '#f39c12',
+                                'MAUVAIS': '#e74c3c'
+                            };
+                            return `
+                                <div style="margin: 5px 0;">
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span>${condition}:</span>
+                                        <span style="font-weight: bold;">${count}</span>
+                                    </div>
+                                    <div style="height: 8px; background: #34495e; border-radius: 4px; overflow: hidden;">
+                                        <div style="height: 100%; width: ${percentage}%; background: ${colors[condition] || '#7f8c8d'}; border-radius: 4px;"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                        
+                        <h5 style="margin-top: 15px;">Pantalons</h5>
+                        ${Object.entries(stats.conditions.pants).map(([condition, count]) => {
+                            const percentage = ((count / uniforms.length) * 100).toFixed(1);
+                            const colors = {
+                                'NEUF': '#27ae60',
+                                'BON': '#3498db',
+                                'USAGE': '#f39c12',
+                                'MAUVAIS': '#e74c3c'
+                            };
+                            return `
+                                <div style="margin: 5px 0;">
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span>${condition}:</span>
+                                        <span style="font-weight: bold;">${count}</span>
+                                    </div>
+                                    <div style="height: 8px; background: #34495e; border-radius: 4px; overflow: hidden;">
+                                        <div style="height: 100%; width: ${percentage}%; background: ${colors[condition] || '#7f8c8d'}; border-radius: 4px;"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            </div>
+            
+            <div>
+                <h4>📋 Tailles les plus courantes</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">
+                    <div>
+                        <h5>Top 5 - Chemises</h5>
+                        ${Object.entries(stats.byShirtSize)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 5)
+                            .map(([size, count], index) => {
+                                const rankColors = ['#f1c40f', '#95a5a6', '#d35400', '#7f8c8d', '#34495e'];
+                                return `
+                                    <div style="display: flex; align-items: center; margin: 10px 0; padding: 10px; background: #2c3e50; border-radius: 5px;">
+                                        <div style="width: 30px; height: 30px; background: ${rankColors[index]}; color: white; 
+                                             border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+                                             font-weight: bold; margin-right: 10px;">
+                                            ${index + 1}
+                                        </div>
+                                        <div style="flex-grow: 1;">
+                                            <div style="font-weight: bold;">Taille ${size}</div>
+                                            <div style="font-size: 0.9em; color: #bdc3c7;">${count} agents</div>
+                                        </div>
+                                        <div style="font-weight: bold; color: #3498db;">
+                                            ${((count / uniforms.length) * 100).toFixed(1)}%
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                    </div>
+                    
+                    <div>
+                        <h5>Top 5 - Pantalons</h5>
+                        ${Object.entries(stats.byPantsSize)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 5)
+                            .map(([size, count], index) => {
+                                const rankColors = ['#f1c40f', '#95a5a6', '#d35400', '#7f8c8d', '#34495e'];
+                                return `
+                                    <div style="display: flex; align-items: center; margin: 10px 0; padding: 10px; background: #2c3e50; border-radius: 5px;">
+                                        <div style="width: 30px; height: 30px; background: ${rankColors[index]}; color: white; 
+                                             border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+                                             font-weight: bold; margin-right: 10px;">
+                                            ${index + 1}
+                                        </div>
+                                        <div style="flex-grow: 1;">
+                                            <div style="font-weight: bold;">Taille ${size}</div>
+                                            <div style="font-size: 0.9em; color: #bdc3c7;">${count} agents</div>
+                                        </div>
+                                        <div style="font-weight: bold; color: #9b59b6;">
+                                            ${((count / uniforms.length) * 100).toFixed(1)}%
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 30px; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                <h4 style="margin-top: 0;">📝 Recommandations d'achat</h4>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    ${stats.renewalNeeded.shirt > 5 ? 
+                        `<li style="color:#e74c3c;">⚠️ Commander ${stats.renewalNeeded.shirt} chemises de remplacement</li>` : ''}
+                    ${stats.renewalNeeded.pants > 5 ? 
+                        `<li style="color:#e74c3c;">⚠️ Commander ${stats.renewalNeeded.pants} pantalons de remplacement</li>` : ''}
+                    
+                    ${(() => {
+                        const mostCommonShirt = Object.entries(stats.byShirtSize).sort((a, b) => b[1] - a[1])[0];
+                        const mostCommonPants = Object.entries(stats.byPantsSize).sort((a, b) => b[1] - a[1])[0];
+                        
+                        let recommendations = [];
+                        if (mostCommonShirt) {
+                            recommendations.push(`<li style="color:#3498db;">📦 Taille de chemise la plus courante: ${mostCommonShirt[0]} (${mostCommonShirt[1]} agents)</li>`);
+                        }
+                        if (mostCommonPants) {
+                            recommendations.push(`<li style="color:#9b59b6;">📦 Taille de pantalon la plus courante: ${mostCommonPants[0]} (${mostCommonPants[1]} agents)</li>`);
+                        }
+                        return recommendations.join('');
+                    })()}
+                </ul>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📊 Statistiques Habillement", html, `
+        <button class="popup-button blue" onclick="showUniformReport()">
+            ↩️ Retour au rapport
+        </button>
+        <button class="popup-button gray" onclick="displayUniformMenu()">
+            Retour
+        </button>
+    `);
+}
+
+function showUniformDeadlines() {
+    if (uniforms.length === 0) {
+        showSnackbar("ℹ️ Aucune donnée d'habillement disponible");
+        return;
+    }
+    
+    // Calculer les échéances
+    const today = new Date();
+    const deadlines = [];
+    
+    uniforms.forEach(uniform => {
+        // Date de renouvellement = date de fourniture + 2 ans
+        const shirtRenewalDate = new Date(uniform.shirt.date);
+        shirtRenewalDate.setFullYear(shirtRenewalDate.getFullYear() + 2);
+        
+        const pantsRenewalDate = new Date(uniform.pants.date);
+        pantsRenewalDate.setFullYear(pantsRenewalDate.getFullYear() + 2);
+        
+        // Calculer les jours restants
+        const shirtDaysLeft = Math.ceil((shirtRenewalDate - today) / (1000 * 60 * 60 * 24));
+        const pantsDaysLeft = Math.ceil((pantsRenewalDate - today) / (1000 * 60 * 60 * 24));
+        
+        if (shirtDaysLeft <= 90 || pantsDaysLeft <= 90) {
+            deadlines.push({
+                agentCode: uniform.agentCode,
+                agentName: uniform.agentName,
+                agentGroup: uniform.agentGroup,
+                shirt: {
+                    date: uniform.shirt.date,
+                    renewalDate: shirtRenewalDate,
+                    daysLeft: shirtDaysLeft,
+                    size: uniform.shirt.size
+                },
+                pants: {
+                    date: uniform.pants.date,
+                    renewalDate: pantsRenewalDate,
+                    daysLeft: pantsDaysLeft,
+                    size: uniform.pants.size
+                }
+            });
+        }
+    });
+    
+    // Trier par échéance la plus proche
+    deadlines.sort((a, b) => {
+        const aMinDays = Math.min(a.shirt.daysLeft, a.pants.daysLeft);
+        const bMinDays = Math.min(b.shirt.daysLeft, b.pants.daysLeft);
+        return aMinDays - bMinDays;
+    });
+    
+    if (deadlines.length === 0) {
+        let html = `
+            <div class="info-section">
+                <h3>📅 Échéances d'Habillement</h3>
+                <div style="text-align: center; padding: 40px;">
+                    <div style="font-size: 3em; color: #27ae60;">✅</div>
+                    <h4 style="color: #27ae60;">Toutes les échéances sont respectées</h4>
+                    <p style="color: #7f8c8d; margin-top: 10px;">
+                        Aucun renouvellement nécessaire dans les 90 prochains jours.
+                    </p>
+                </div>
+            </div>
+        `;
+        
+        openPopup("📅 Échéances Habillement", html, `
+            <button class="popup-button blue" onclick="showUniformReport()">
+                ↩️ Retour au rapport
+            </button>
+            <button class="popup-button gray" onclick="displayUniformMenu()">
+                Retour
+            </button>
+        `);
+        return;
+    }
+    
+    let html = `
+        <div class="info-section">
+            <h3>📅 Échéances d'Habillement</h3>
+            <p style="color: #7f8c8d; margin-bottom: 20px;">
+                Échéances dans les 90 prochains jours
+            </p>
+            
+            <div style="margin-bottom: 30px;">
+                ${deadlines.map(deadline => {
+                    const getStatusColor = (daysLeft) => {
+                        if (daysLeft <= 0) return '#e74c3c';
+                        if (daysLeft <= 30) return '#e67e22';
+                        if (daysLeft <= 60) return '#f39c12';
+                        return '#3498db';
+                    };
+                    
+                    const getStatusText = (daysLeft) => {
+                        if (daysLeft <= 0) return 'DÉPASSÉ';
+                        if (daysLeft <= 30) return 'URGENT';
+                        if (daysLeft <= 60) return 'PROCHE';
+                        return 'NORMAL';
+                    };
+                    
+                    return `
+                        <div style="margin-bottom: 15px; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div>
+                                    <h4 style="margin: 0;">${deadline.agentName}</h4>
+                                    <p style="margin: 5px 0 0; color: #bdc3c7; font-size: 0.9em;">
+                                        ${deadline.agentCode} - Groupe ${deadline.agentGroup}
+                                    </p>
+                                </div>
+                                <button class="action-btn blue" onclick="editUniform('${deadline.agentCode}')">
+                                    ✏️ Mettre à jour
+                                </button>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                                <div>
+                                    <h5 style="margin: 0 0 10px 0; color: #3498db;">Chemise (${deadline.shirt.size})</h5>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span>Dernière fourniture:</span>
+                                        <span>${new Date(deadline.shirt.date).toLocaleDateString('fr-FR')}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                                        <span>Échéance:</span>
+                                        <span>${new Date(deadline.shirt.renewalDate).toLocaleDateString('fr-FR')}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                                        <span>Statut:</span>
+                                        <span style="color: ${getStatusColor(deadline.shirt.daysLeft)}; font-weight: bold;">
+                                            ${getStatusText(deadline.shirt.daysLeft)} (${deadline.shirt.daysLeft} jours)
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <h5 style="margin: 0 0 10px 0; color: #9b59b6;">Pantalon (${deadline.pants.size})</h5>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span>Dernière fourniture:</span>
+                                        <span>${new Date(deadline.pants.date).toLocaleDateString('fr-FR')}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                                        <span>Échéance:</span>
+                                        <span>${new Date(deadline.pants.renewalDate).toLocaleDateString('fr-FR')}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                                        <span>Statut:</span>
+                                        <span style="color: ${getStatusColor(deadline.pants.daysLeft)}; font-weight: bold;">
+                                            ${getStatusText(deadline.pants.daysLeft)} (${deadline.pants.daysLeft} jours)
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            
+            <div style="padding: 15px; background: #2c3e50; border-radius: 8px;">
+                <h4 style="margin-top: 0;">📋 Résumé des échéances</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 10px;">
+                    <div style="text-align: center; padding: 10px; background: #e74c3c; border-radius: 5px;">
+                        <div style="font-size: 1.5em; font-weight: bold; color: white;">
+                            ${deadlines.filter(d => d.shirt.daysLeft <= 0 || d.pants.daysLeft <= 0).length}
+                        </div>
+                        <div style="font-size: 0.9em; color: white;">Dépassées</div>
+                    </div>
+                    <div style="text-align: center; padding: 10px; background: #e67e22; border-radius: 5px;">
+                        <div style="font-size: 1.5em; font-weight: bold; color: white;">
+                            ${deadlines.filter(d => (d.shirt.daysLeft > 0 && d.shirt.daysLeft <= 30) || 
+                                                   (d.pants.daysLeft > 0 && d.pants.daysLeft <= 30)).length}
+                        </div>
+                        <div style="font-size: 0.9em; color: white;">Urgentes (≤ 30j)</div>
+                    </div>
+                    <div style="text-align: center; padding: 10px; background: #f39c12; border-radius: 5px;">
+                        <div style="font-size: 1.5em; font-weight: bold; color: white;">
+                            ${deadlines.filter(d => (d.shirt.daysLeft > 30 && d.shirt.daysLeft <= 60) || 
+                                                   (d.pants.daysLeft > 30 && d.pants.daysLeft <= 60)).length}
+                        </div>
+                        <div style="font-size: 0.9em; color: white;">Proches (≤ 60j)</div>
+                    </div>
+                    <div style="text-align: center; padding: 10px; background: #3498db; border-radius: 5px;">
+                        <div style="font-size: 1.5em; font-weight: bold; color: white;">
+                            ${deadlines.filter(d => d.shirt.daysLeft > 60 && d.pants.daysLeft > 60).length}
+                        </div>
+                        <div style="font-size: 0.9em; color: white;">Normales (≤ 90j)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📅 Échéances Habillement", html, `
+        <button class="popup-button green" onclick="generateRenewalOrder()">
+            📋 Générer bon de commande
+        </button>
+        <button class="popup-button blue" onclick="showUniformReport()">
+            ↩️ Retour au rapport
+        </button>
+        <button class="popup-button gray" onclick="displayUniformMenu()">
+            Retour
+        </button>
+    `);
+}
+
+function generateRenewalOrder() {
+    if (!checkPassword()) return;
+    
+    const today = new Date();
+    const renewalItems = [];
+    
+    uniforms.forEach(uniform => {
+        // Vérifier les chemises à renouveler
+        const shirtRenewalDate = new Date(uniform.shirt.date);
+        shirtRenewalDate.setFullYear(shirtRenewalDate.getFullYear() + 2);
+        const shirtDaysLeft = Math.ceil((shirtRenewalDate - today) / (1000 * 60 * 60 * 24));
+        
+        if (shirtDaysLeft <= 60) {
+            renewalItems.push({
+                type: 'CHEMISE',
+                size: uniform.shirt.size,
+                agent: uniform.agentName,
+                agentCode: uniform.agentCode,
+                daysLeft: shirtDaysLeft,
+                lastDate: uniform.shirt.date
+            });
+        }
+        
+        // Vérifier les pantalons à renouveler
+        const pantsRenewalDate = new Date(uniform.pants.date);
+        pantsRenewalDate.setFullYear(pantsRenewalDate.getFullYear() + 2);
+        const pantsDaysLeft = Math.ceil((pantsRenewalDate - today) / (1000 * 60 * 60 * 24));
+        
+        if (pantsDaysLeft <= 60) {
+            renewalItems.push({
+                type: 'PANTALON',
+                size: uniform.pants.size,
+                agent: uniform.agentName,
+                agentCode: uniform.agentCode,
+                daysLeft: pantsDaysLeft,
+                lastDate: uniform.pants.date
+            });
+        }
+    });
+    
+    if (renewalItems.length === 0) {
+        showSnackbar("ℹ️ Aucun renouvellement nécessaire dans les 60 prochains jours");
+        return;
+    }
+    
+    // Grouper par type et taille
+    const groupedItems = {};
+    renewalItems.forEach(item => {
+        const key = `${item.type}_${item.size}`;
+        if (!groupedItems[key]) {
+            groupedItems[key] = {
+                type: item.type,
+                size: item.size,
+                count: 0,
+                agents: []
+            };
+        }
+        groupedItems[key].count++;
+        groupedItems[key].agents.push(`${item.agent} (${item.agentCode})`);
+    });
+    
+    let csvContent = "Bon de commande - Renouvellement habillement\n\n";
+    csvContent += "Date de génération: " + new Date().toLocaleDateString('fr-FR') + "\n";
+    csvContent += "Nombre total d'articles: " + renewalItems.length + "\n\n";
+    csvContent += "Type;Taille;Quantité;Agents concernés\n";
+    
+    Object.values(groupedItems).forEach(item => {
+        csvContent += `${item.type};${item.size};${item.count};"${item.agents.join(', ')}"\n`;
+    });
+    
+    csvContent += "\n\nDétail par agent:\n";
+    csvContent += "Agent;Code;Équipement;Taille;Dernière fourniture;Jours restants\n";
+    
+    renewalItems.forEach(item => {
+        csvContent += `${item.agent};${item.agentCode};${item.type};${item.size};`;
+        csvContent += `${new Date(item.lastDate).toLocaleDateString('fr-FR')};${item.daysLeft}\n`;
+    });
+    
+    const filename = `Bon_Commande_Habillement_${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCSV(csvContent, filename);
+    showSnackbar(`✅ Bon de commande généré: ${filename}`);
+}
+
+function exportUniformReport() {
+    if (uniforms.length === 0) {
+        showSnackbar("ℹ️ Aucune donnée d'habillement à exporter");
+        return;
+    }
+    
+    let csvContent = "Rapport d'Habillement - " + new Date().toLocaleDateString('fr-FR') + "\n\n";
+    csvContent += "Agent;Code Agent;Groupe;Chemise Taille;Chemise Date;Chemise État;";
+    csvContent += "Pantalon Taille;Pantalon Date;Pantalon État;Veste Taille;Veste Date;";
+    csvContent += "Cravate;Date Cravate;Pointure Chaussures;Commentaires;Dernière mise à jour\n";
+    
+    uniforms.forEach(uniform => {
+        csvContent += `"${uniform.agentName}";${uniform.agentCode};${uniform.agentGroup};`;
+        csvContent += `${uniform.shirt.size};${uniform.shirt.date};${uniform.shirt.condition};`;
+        csvContent += `${uniform.pants.size};${uniform.pants.date};${uniform.pants.condition};`;
+        csvContent += `${uniform.jacket ? uniform.jacket.size : ''};${uniform.jacket ? uniform.jacket.date : ''};`;
+        csvContent += `${uniform.accessories.tie ? 'OUI' : 'NON'};${uniform.accessories.tieDate || ''};`;
+        csvContent += `${uniform.accessories.shoesSize || ''};"${uniform.comments || ''}";`;
+        csvContent += `${uniform.lastUpdated}\n`;
+    });
+    
+    const filename = `Rapport_Habillement_${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCSV(csvContent, filename);
+    showSnackbar(`✅ Rapport d'habillement téléchargé`);
+}
+
+function filterUniformsEdit() {
+    const searchTerm = document.getElementById('searchUniformEdit').value.toLowerCase();
+    const filteredUniforms = uniforms.filter(uniform => 
+        uniform.agentName.toLowerCase().includes(searchTerm) ||
+        uniform.agentCode.toLowerCase().includes(searchTerm) ||
+        uniform.agentGroup.toLowerCase().includes(searchTerm)
+    );
+    
+    document.getElementById('uniformEditList').innerHTML = `
+        ${filteredUniforms.length === 0 ? 
+            '<p style="text-align:center; color:#7f8c8d; padding:20px;">Aucun habillement trouvé</p>' :
+            `
+            <table class="classement-table">
+                <thead>
+                    <tr>
+                        <th>Agent</th>
+                        <th>Chemise</th>
+                        <th>Pantalon</th>
+                        <th>Dernière mise à jour</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${filteredUniforms.map(uniform => {
+                        const needsReplacement = uniform.shirt.needsReplacement || uniform.pants.needsReplacement;
+                        return `
+                            <tr>
+                                <td>
+                                    <strong>${uniform.agentName}</strong><br>
+                                    <small>${uniform.agentCode} - Groupe ${uniform.agentGroup}</small>
+                                </td>
+                                <td>${uniform.shirt.size}<br>
+                                    <small>${new Date(uniform.shirt.date).toLocaleDateString('fr-FR')}</small>
+                                    ${uniform.shirt.needsReplacement ? '<br><span style="color:#e74c3c; font-size:0.8em;">⚠️ À renouveler</span>' : ''}
+                                </td>
+                                <td>${uniform.pants.size}<br>
+                                    <small>${new Date(uniform.pants.date).toLocaleDateString('fr-FR')}</small>
+                                    ${uniform.pants.needsReplacement ? '<br><span style="color:#e74c3c; font-size:0.8em;">⚠️ À renouveler</span>' : ''}
+                                </td>
+                                <td>${new Date(uniform.lastUpdated).toLocaleDateString('fr-FR')}</td>
+                                <td>
+                                    <button class="action-btn small blue" onclick="editUniform('${uniform.agentCode}')">
+                                        ✏️ Modifier
+                                    </button>
+                                    <button class="action-btn small red" onclick="deleteUniformConfirm('${uniform.agentCode}')">
+                                        🗑️ Supprimer
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+            `
+        }
+    `;
+}
+
+// === FONCTION DE VÉRIFICATION DE MOT DE PASSE ===
+
+function checkPassword() {
+    const password = prompt("🔐 Veuillez entrer le mot de passe pour continuer:");
+    if (password === "Nabil1974") {
+        return true;
+    } else {
+        showSnackbar("❌ Mot de passe incorrect");
+        return false;
+    }
+}
+
+// === AJOUT DES FONCTIONS MANQUANTES AUX ÉVÉNEMENTS ===
+
+// Initialisation des écouteurs d'événements pour les nouvelles fonctionnalités
+document.addEventListener('DOMContentLoaded', () => {
+    // S'assurer que les données sont initialisées
+    if (!radios) radios = [];
+    if (!uniforms) uniforms = [];
+    if (!radioHistory) radioHistory = [];
+    
+    console.log("✅ Toutes les fonctions manquantes ont été implémentées");
+});
 // === FONCTIONS PLACEHOLDER (À IMPLÉMENTER) ===
 function showGlobalStats() { showSnackbar("📈 Statistiques Globales - Bientôt disponible"); }
 function showAgentStatsSelection() { showSnackbar("👤 Statistiques par Agent - Bientôt disponible"); }
