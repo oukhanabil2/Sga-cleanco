@@ -12,8 +12,7 @@
     {
       "src": "icon.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
   ],
   "start_url": "./index.html",
@@ -21,6 +20,5 @@
   "theme_color": "#34495e",
   "display": "standalone",
   "orientation": "portrait",
-  "scope": "./",
-  "categories": ["productivity", "business", "utilities"]
+  "scope": "./"
 }
