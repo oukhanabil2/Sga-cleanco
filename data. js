@@ -2,7 +2,7 @@
 // Transformé depuis le fichier Python
 
 // Constantes pour l'application
-const DATE_AFFECTATION_BASE = "2024-01-01";
+const DATE_AFFECTATION_BASE = "2025-11-01";
 const JOURS_FRANCAIS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
 const SHIFT_COLORS = {
