@@ -23,7 +23,7 @@ const SHIFT_COLORS = {
     'A': '#95a5a6',
     '-': '#7f8c8d'
 };
-const DATE_AFFECTATION_BASE = new Date('2024-01-01');
+const DATE_AFFECTATION_BASE = new Date('2025-11-01');
 const WARNING_TYPES = {
     ORAL: { label: 'Avertissement Oral', color: '#f39c12', severity: 1 },
     ECRIT: { label: 'Avertissement Écrit', color: '#e74c3c', severity: 2 },
@@ -1033,7 +1033,7 @@ function showGroupPlanningSelection() {
                 <select id="groupMonth" class="form-input">
                     ${Array.from({length: 12}, (_, i) => {
                         const monthNum = i + 1;
-                        const monthName = new Date(2024, i, 1).toLocaleDateString('fr-FR', { month: 'long' });
+                        const monthName = new Date(2025, i, 1).toLocaleDateString('fr-FR', { month: 'long' });
                         return `<option value="${monthNum}" ${monthNum === new Date().getMonth() + 1 ? 'selected' : ''}>${monthName.charAt(0).toUpperCase() + monthName.slice(1)}</option>`;
                     }).join('')}
                 </select>
