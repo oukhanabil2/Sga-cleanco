@@ -6639,6 +6639,2170 @@ function exportUniformReport() {
     downloadCSV(csvContent, `Rapport_Habillement_${new Date().toISOString().split('T')[0]}.csv`);
     showSnackbar("✅ Rapport d'habillement exporté avec succès");
 }
+// === MODULE STATISTIQUES - IMPLÉMENTATIONS COMPLÈTES ===
+
+function showGlobalStats() {
+    const activeAgents = agents.filter(a => a.statut === 'actif');
+    const totalAgents = activeAgents.length;
+    
+    // Calculer les statistiques par groupe
+    const groupStats = {};
+    activeAgents.forEach(agent => {
+        if (!groupStats[agent.groupe]) {
+            groupStats[agent.groupe] = { count: 0, postes: {} };
+        }
+        groupStats[agent.groupe].count++;
+        
+        // Compter par poste
+        const poste = agent.poste || 'Non spécifié';
+        groupStats[agent.groupe].postes[poste] = (groupStats[agent.groupe].postes[poste] || 0) + 1;
+    });
+    
+    // Calculer les congés du mois en cours
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
+    let totalLeavesThisMonth = 0;
+    
+    Object.keys(planningData).forEach(monthKey => {
+        if (monthKey === `${currentYear}-${currentMonth.toString().padStart(2, '0')}`) {
+            Object.keys(planningData[monthKey]).forEach(agentCode => {
+                Object.keys(planningData[monthKey][agentCode]).forEach(dateStr => {
+                    const record = planningData[monthKey][agentCode][dateStr];
+                    if (['C', 'M', 'A'].includes(record.shift)) {
+                        totalLeavesThisMonth++;
+                    }
+                });
+            });
+        }
+    });
+    
+    // Calculer les avertissements actifs
+    const activeWarnings = warnings ? warnings.filter(w => w.status === 'active').length : 0;
+    
+    let html = `
+        <div class="info-section">
+            <h3>📈 Statistiques Globales</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 30px;">
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #2c3e50, #34495e); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: #3498db;">${totalAgents}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Agents actifs</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #27ae60, #2ecc71); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: white;">${Object.keys(groupStats).length}</div>
+                    <div style="font-size: 0.9em; color: white;">Groupes</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #f39c12, #f1c40f); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: white;">${totalLeavesThisMonth}</div>
+                    <div style="font-size: 0.9em; color: white;">Congés ce mois</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #e74c3c, #c0392b); border-radius: 8px;">
+                    <div style="font-size: 2.5em; font-weight: bold; color: white;">${activeWarnings}</div>
+                    <div style="font-size: 0.9em; color: white;">Avertissements actifs</div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                <div>
+                    <h4>👥 Répartition par Groupe</h4>
+                    <div style="margin-top: 15px;">
+                        ${Object.entries(groupStats)
+                            .sort(([groupA, statsA], [groupB, statsB]) => statsB.count - statsA.count)
+                            .map(([group, stats]) => {
+                                const percentage = ((stats.count / totalAgents) * 100).toFixed(1);
+                                return `
+                                    <div style="margin: 10px 0;">
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                            <span>Groupe ${group}:</span>
+                                            <span style="font-weight: bold;">${stats.count} (${percentage}%)</span>
+                                        </div>
+                                        <div style="height: 10px; background: #34495e; border-radius: 5px; overflow: hidden;">
+                                            <div style="height: 100%; width: ${percentage}%; background: #3498db; border-radius: 5px;"></div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                    </div>
+                </div>
+                
+                <div>
+                    <h4>📊 Postes les plus courants</h4>
+                    <div style="margin-top: 15px;">
+                        ${(() => {
+                            // Compter tous les postes
+                            const posteCount = {};
+                            activeAgents.forEach(agent => {
+                                const poste = agent.poste || 'Non spécifié';
+                                posteCount[poste] = (posteCount[poste] || 0) + 1;
+                            });
+                            
+                            // Trier et prendre le top 5
+                            const topPostes = Object.entries(posteCount)
+                                .sort((a, b) => b[1] - a[1])
+                                .slice(0, 5);
+                            
+                            return topPostes.map(([poste, count], index) => {
+                                const percentage = ((count / totalAgents) * 100).toFixed(1);
+                                const rankColors = ['#f1c40f', '#95a5a6', '#d35400', '#7f8c8d', '#34495e'];
+                                return `
+                                    <div style="display: flex; align-items: center; margin: 10px 0; padding: 10px; background: #2c3e50; border-radius: 5px;">
+                                        <div style="width: 30px; height: 30px; background: ${rankColors[index]}; color: white; 
+                                             border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+                                             font-weight: bold; margin-right: 10px;">
+                                            ${index + 1}
+                                        </div>
+                                        <div style="flex-grow: 1;">
+                                            <div style="font-weight: bold;">${poste}</div>
+                                            <div style="font-size: 0.9em; color: #bdc3c7;">${count} agents</div>
+                                        </div>
+                                        <div style="font-weight: bold; color: #27ae60;">
+                                            ${percentage}%
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('');
+                        })()}
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                <h4 style="margin-top: 0;">📈 Tendances</h4>
+                <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 1.2em; font-weight: bold; color: #3498db;">
+                            ${activeAgents.filter(a => a.date_entree && a.date_entree.startsWith(currentYear.toString())).length}
+                        </div>
+                        <div style="font-size: 0.9em; color: #bdc3c7;">Nouveaux agents cette année</div>
+                    </div>
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 1.2em; font-weight: bold; color: #f39c12;">
+                            ${agents.filter(a => a.statut === 'inactif').length}
+                        </div>
+                        <div style="font-size: 0.9em; color: #bdc3c7;">Agents inactifs</div>
+                    </div>
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 1.2em; font-weight: bold; color: #9b59b6;">
+                            ${calculateAverageAge()}
+                        </div>
+                        <div style="font-size: 0.9em; color: #bdc3c7;">Ancienneté moyenne (ans)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📈 Statistiques Globales", html, `
+        <button class="popup-button blue" onclick="exportGlobalStats()">📤 Exporter</button>
+        <button class="popup-button gray" onclick="displayStatisticsMenu()">Retour</button>
+    `);
+}
+
+function calculateAverageAge() {
+    const activeAgents = agents.filter(a => a.statut === 'actif' && a.date_entree);
+    if (activeAgents.length === 0) return "0.0";
+    
+    const totalYears = activeAgents.reduce((sum, agent) => {
+        if (!agent.date_entree) return sum;
+        const entryDate = new Date(agent.date_entree);
+        const years = (new Date() - entryDate) / (1000 * 60 * 60 * 24 * 365.25);
+        return sum + years;
+    }, 0);
+    
+    return (totalYears / activeAgents.length).toFixed(1);
+}
+
+function showAgentStatsSelection() {
+    const activeAgents = agents.filter(a => a.statut === 'actif');
+    
+    let html = `
+        <div class="info-section">
+            <h3>👤 Sélection de l'Agent pour Statistiques</h3>
+            <div class="form-group">
+                <label>Sélectionner un agent:</label>
+                <select id="agentForStats" class="form-input">
+                    <option value="">Sélectionner un agent</option>
+                    ${activeAgents.map(agent => 
+                        `<option value="${agent.code}">${agent.nom} ${agent.prenom} (${agent.code}) - Groupe ${agent.groupe}</option>`
+                    ).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Période d'analyse:</label>
+                <select id="statsPeriod" class="form-input">
+                    <option value="current_month">Ce mois</option>
+                    <option value="last_3_months">3 derniers mois</option>
+                    <option value="current_year">Cette année</option>
+                    <option value="last_year">Année dernière</option>
+                    <option value="all_time">Toute période</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Type de statistiques:</label>
+                <select id="statsType" class="form-input">
+                    <option value="detailed">Détaillées (shifts, congés)</option>
+                    <option value="performance">Performance</option>
+                    <option value="attendance">Présence/Absence</option>
+                    <option value="summary">Résumé</option>
+                </select>
+            </div>
+        </div>
+    `;
+    
+    openPopup("👤 Statistiques par Agent", html, `
+        <button class="popup-button green" onclick="showSelectedAgentStats()">📊 Voir Statistiques</button>
+        <button class="popup-button blue" onclick="compareAgentsStats()">📈 Comparer Agents</button>
+        <button class="popup-button gray" onclick="displayStatisticsMenu()">Annuler</button>
+    `);
+}
+
+function showSelectedAgentStats() {
+    const agentCode = document.getElementById('agentForStats').value;
+    const period = document.getElementById('statsPeriod').value;
+    const statsType = document.getElementById('statsType').value;
+    
+    if (!agentCode) {
+        showSnackbar("⚠️ Veuillez sélectionner un agent");
+        return;
+    }
+    
+    const agent = agents.find(a => a.code === agentCode);
+    if (!agent) {
+        showSnackbar("⚠️ Agent non trouvé");
+        return;
+    }
+    
+    // Calculer la période
+    const today = new Date();
+    let startDate, endDate;
+    
+    switch(period) {
+        case 'current_month':
+            startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+            endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            break;
+        case 'last_3_months':
+            startDate = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+            endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            break;
+        case 'current_year':
+            startDate = new Date(today.getFullYear(), 0, 1);
+            endDate = new Date(today.getFullYear(), 11, 31);
+            break;
+        case 'last_year':
+            startDate = new Date(today.getFullYear() - 1, 0, 1);
+            endDate = new Date(today.getFullYear() - 1, 11, 31);
+            break;
+        default: // all_time
+            startDate = new Date(2020, 0, 1);
+            endDate = new Date(2030, 11, 31);
+    }
+    
+    // Calculer les statistiques
+    const stats = calculateAgentDetailedStats(agentCode, startDate, endDate);
+    
+    if (statsType === 'detailed') {
+        showAgentDetailedStats(agent, stats, period);
+    } else if (statsType === 'performance') {
+        showAgentPerformanceStats(agent, stats, period);
+    } else if (statsType === 'attendance') {
+        showAgentAttendanceStats(agent, stats, period);
+    } else {
+        showAgentSummaryStats(agent, stats, period);
+    }
+}
+
+function calculateAgentDetailedStats(agentCode, startDate, endDate) {
+    const stats = {
+        totalDays: 0,
+        shifts: { '1': 0, '2': 0, '3': 0, 'R': 0, 'C': 0, 'M': 0, 'A': 0, '-': 0 },
+        leaves: 0,
+        sickDays: 0,
+        otherAbsences: 0,
+        weekendDays: 0,
+        holidayDays: 0,
+        modifiedShifts: 0,
+        exchanges: 0
+    };
+    
+    const current = new Date(startDate);
+    while (current <= endDate) {
+        const dateStr = current.toISOString().split('T')[0];
+        const shift = getShiftForAgent(agentCode, dateStr);
+        
+        stats.totalDays++;
+        stats.shifts[shift] = (stats.shifts[shift] || 0) + 1;
+        
+        // Compter les types d'absence
+        if (shift === 'C') stats.leaves++;
+        if (shift === 'M') stats.sickDays++;
+        if (shift === 'A') stats.otherAbsences++;
+        
+        // Vérifier weekend
+        if (current.getDay() === 0 || current.getDay() === 6) {
+            stats.weekendDays++;
+        }
+        
+        // Vérifier jour férié
+        if (isHolidayDate(current)) {
+            stats.holidayDays++;
+        }
+        
+        // Vérifier si le shift a été modifié
+        const monthKey = dateStr.substring(0, 7);
+        if (planningData[monthKey] && 
+            planningData[monthKey][agentCode] && 
+            planningData[monthKey][agentCode][dateStr]) {
+            const record = planningData[monthKey][agentCode][dateStr];
+            if (record.type === 'modification_manuelle') {
+                stats.modifiedShifts++;
+            } else if (record.type === 'echange' || record.type === 'echange_reciproque') {
+                stats.exchanges++;
+            }
+        }
+        
+        current.setDate(current.getDate() + 1);
+    }
+    
+    // Calculer les pourcentages
+    stats.workedDays = stats.shifts['1'] + stats.shifts['2'] + stats.shifts['3'];
+    stats.workRate = stats.totalDays > 0 ? ((stats.workedDays / stats.totalDays) * 100).toFixed(1) : 0;
+    stats.absenceRate = stats.totalDays > 0 ? (((stats.leaves + stats.sickDays + stats.otherAbsences) / stats.totalDays) * 100).toFixed(1) : 0;
+    
+    return stats;
+}
+
+function showAgentDetailedStats(agent, stats, period) {
+    let html = `
+        <div class="info-section">
+            <h3>📊 Statistiques détaillées - ${agent.nom} ${agent.prenom}</h3>
+            <p><strong>${agent.code}</strong> | Groupe ${agent.groupe} | Poste: ${agent.poste || 'Non spécifié'}</p>
+            <p style="color: #7f8c8d;">Période: ${period === 'current_month' ? 'Ce mois' : 
+                               period === 'last_3_months' ? '3 derniers mois' : 
+                               period === 'current_year' ? 'Cette année' : 
+                               period === 'last_year' ? 'Année dernière' : 'Toute période'}</p>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0;">
+                <div style="text-align: center; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: #3498db;">${stats.totalDays}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Jours total</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: #27ae60; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${stats.workedDays}</div>
+                    <div style="font-size: 0.9em; color: white;">Jours travaillés</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: #f39c12; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${stats.workRate}%</div>
+                    <div style="font-size: 0.9em; color: white;">Taux de travail</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: #e74c3c; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${stats.absenceRate}%</div>
+                    <div style="font-size: 0.9em; color: white;">Taux d'absence</div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+                <div>
+                    <h4>📅 Répartition des Shifts</h4>
+                    <div style="margin-top: 10px;">
+                        ${Object.entries(stats.shifts)
+                            .filter(([shift, count]) => count > 0)
+                            .map(([shift, count]) => {
+                                const percentage = ((count / stats.totalDays) * 100).toFixed(1);
+                                const color = SHIFT_COLORS[shift] || '#7f8c8d';
+                                const label = SHIFT_LABELS[shift] || shift;
+                                return `
+                                    <div style="margin: 8px 0;">
+                                        <div style="display: flex; justify-content: space-between;">
+                                            <span>
+                                                <span style="display: inline-block; width: 12px; height: 12px; 
+                                                      background-color: ${color}; border-radius: 2px; margin-right: 8px;"></span>
+                                                ${label}
+                                            </span>
+                                            <span style="font-weight: bold;">${count} (${percentage}%)</span>
+                                        </div>
+                                        <div style="height: 8px; background: #34495e; border-radius: 4px; overflow: hidden; margin-top: 2px;">
+                                            <div style="height: 100%; width: ${percentage}%; background: ${color}; border-radius: 4px;"></div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                    </div>
+                </div>
+                
+                <div>
+                    <h4>📊 Détails supplémentaires</h4>
+                    <div style="margin-top: 10px;">
+                        <div style="margin: 10px 0; padding: 10px; background: #34495e; border-radius: 5px;">
+                            <strong>Jours de weekend:</strong> ${stats.weekendDays}
+                        </div>
+                        <div style="margin: 10px 0; padding: 10px; background: #34495e; border-radius: 5px;">
+                            <strong>Jours fériés:</strong> ${stats.holidayDays}
+                        </div>
+                        <div style="margin: 10px 0; padding: 10px; background: #34495e; border-radius: 5px;">
+                            <strong>Shifts modifiés:</strong> ${stats.modifiedShifts}
+                        </div>
+                        <div style="margin: 10px 0; padding: 10px; background: #34495e; border-radius: 5px;">
+                            <strong>Échanges effectués:</strong> ${stats.exchanges}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                <h4 style="margin-top: 0;">📈 Performance</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.2em; font-weight: bold; color: ${stats.workRate >= 80 ? '#27ae60' : stats.workRate >= 60 ? '#f39c12' : '#e74c3c'}">
+                            ${stats.workRate}%
+                        </div>
+                        <div style="font-size: 0.9em; color: #bdc3c7;">Taux de présence</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.2em; font-weight: bold; color: ${stats.leaves <= 5 ? '#27ae60' : stats.leaves <= 10 ? '#f39c12' : '#e74c3c'}">
+                            ${stats.leaves}
+                        </div>
+                        <div style="font-size: 0.9em; color: #bdc3c7;">Congés pris</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.2em; font-weight: bold; color: ${stats.sickDays <= 2 ? '#27ae60' : stats.sickDays <= 5 ? '#f39c12' : '#e74c3c'}">
+                            ${stats.sickDays}
+                        </div>
+                        <div style="font-size: 0.9em; color: #bdc3c7;">Jours maladie</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    openPopup(`📊 Statistiques de ${agent.code}`, html, `
+        <button class="popup-button blue" onclick="showAgentStatsSelection()">👤 Autre Agent</button>
+        <button class="popup-button green" onclick="exportAgentStats('${agent.code}')">📤 Exporter</button>
+        <button class="popup-button gray" onclick="displayStatisticsMenu()">Retour</button>
+    `);
+}
+
+function showWorkedDaysMenu() {
+    let html = `
+        <div class="info-section">
+            <h3>📊 Jours Travaillés - Menu</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                <div onclick="showWorkedDaysGlobal()" style="cursor: pointer; padding: 20px; background: #2c3e50; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 2em; margin-bottom: 10px;">🌍</div>
+                    <h4 style="margin: 0;">Global</h4>
+                    <p style="color: #bdc3c7; font-size: 0.9em;">Tous les agents</p>
+                </div>
+                <div onclick="showWorkedDaysByGroupSelection()" style="cursor: pointer; padding: 20px; background: #2c3e50; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 2em; margin-bottom: 10px;">👥</div>
+                    <h4 style="margin: 0;">Par Groupe</h4>
+                    <p style="color: #bdc3c7; font-size: 0.9em;">Analyse par groupe</p>
+                </div>
+                <div onclick="showWorkedDaysByAgentSelection()" style="cursor: pointer; padding: 20px; background: #2c3e50; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 2em; margin-bottom: 10px;">👤</div>
+                    <h4 style="margin: 0;">Par Agent</h4>
+                    <p style="color: #bdc3c7; font-size: 0.9em;">Détail par agent</p>
+                </div>
+                <div onclick="showWorkedDaysComparison()" style="cursor: pointer; padding: 20px; background: #2c3e50; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 2em; margin-bottom: 10px;">📈</div>
+                    <h4 style="margin: 0;">Comparaison</h4>
+                    <p style="color: #bdc3c7; font-size: 0.9em;">Comparer agents/groupe</p>
+                </div>
+            </div>
+            <div style="margin-top: 30px; padding: 15px; background: #34495e; border-radius: 5px;">
+                <h4 style="margin-top: 0;">⚙️ Paramètres de période</h4>
+                <div class="form-group">
+                    <label>Période:</label>
+                    <select id="workedDaysPeriod" class="form-input">
+                        <option value="current_month">Ce mois</option>
+                        <option value="last_month">Mois dernier</option>
+                        <option value="current_quarter">Ce trimestre</option>
+                        <option value="last_quarter">Trimestre dernier</option>
+                        <option value="current_year">Cette année</option>
+                        <option value="last_year">Année dernière</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Date personnalisée:</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <input type="date" id="customStartDate" class="form-input" value="${new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]}">
+                        <input type="date" id="customEndDate" class="form-input" value="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📊 Jours Travaillés", html, `
+        <button class="popup-button gray" onclick="displayStatisticsMenu()">Retour</button>
+    `);
+}
+
+function showWorkedDaysGlobal() {
+    const period = document.getElementById('workedDaysPeriod').value;
+    const startDate = document.getElementById('customStartDate').value;
+    const endDate = document.getElementById('customEndDate').value;
+    
+    // Calculer les dates basées sur la période
+    const today = new Date();
+    let calculatedStartDate, calculatedEndDate;
+    
+    if (period === 'custom' && startDate && endDate) {
+        calculatedStartDate = new Date(startDate);
+        calculatedEndDate = new Date(endDate);
+    } else {
+        switch(period) {
+            case 'current_month':
+                calculatedStartDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                calculatedEndDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                break;
+            case 'last_month':
+                calculatedStartDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                calculatedEndDate = new Date(today.getFullYear(), today.getMonth(), 0);
+                break;
+            case 'current_quarter':
+                const quarter = Math.floor(today.getMonth() / 3);
+                calculatedStartDate = new Date(today.getFullYear(), quarter * 3, 1);
+                calculatedEndDate = new Date(today.getFullYear(), (quarter + 1) * 3, 0);
+                break;
+            case 'last_quarter':
+                const lastQuarter = Math.floor((today.getMonth() - 3) / 3);
+                calculatedStartDate = new Date(today.getFullYear(), lastQuarter * 3, 1);
+                calculatedEndDate = new Date(today.getFullYear(), (lastQuarter + 1) * 3, 0);
+                break;
+            case 'current_year':
+                calculatedStartDate = new Date(today.getFullYear(), 0, 1);
+                calculatedEndDate = new Date(today.getFullYear(), 11, 31);
+                break;
+            case 'last_year':
+                calculatedStartDate = new Date(today.getFullYear() - 1, 0, 1);
+                calculatedEndDate = new Date(today.getFullYear() - 1, 11, 31);
+                break;
+            default:
+                calculatedStartDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                calculatedEndDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        }
+    }
+    
+    const activeAgents = agents.filter(a => a.statut === 'actif');
+    const groupStats = {};
+    let totalWorkedDays = 0;
+    let totalPossibleDays = 0;
+    
+    // Calculer pour chaque agent
+    activeAgents.forEach(agent => {
+        const stats = calculateAgentDetailedStats(agent.code, calculatedStartDate, calculatedEndDate);
+        
+        if (!groupStats[agent.groupe]) {
+            groupStats[agent.groupe] = {
+                agents: 0,
+                workedDays: 0,
+                totalDays: 0,
+                workRate: 0
+            };
+        }
+        
+        groupStats[agent.groupe].agents++;
+        groupStats[agent.groupe].workedDays += stats.workedDays;
+        groupStats[agent.groupe].totalDays += stats.totalDays;
+        
+        totalWorkedDays += stats.workedDays;
+        totalPossibleDays += stats.totalDays;
+    });
+    
+    // Calculer les taux par groupe
+    Object.keys(groupStats).forEach(group => {
+        groupStats[group].workRate = groupStats[group].totalDays > 0 ? 
+            ((groupStats[group].workedDays / groupStats[group].totalDays) * 100).toFixed(1) : 0;
+    });
+    
+    // Calculer le taux global
+    const globalWorkRate = totalPossibleDays > 0 ? ((totalWorkedDays / totalPossibleDays) * 100).toFixed(1) : 0;
+    
+    let html = `
+        <div class="info-section">
+            <h3>📊 Jours Travaillés - Global</h3>
+            <p style="color: #7f8c8d;">
+                Période: ${calculatedStartDate.toLocaleDateString('fr-FR')} au ${calculatedEndDate.toLocaleDateString('fr-FR')}
+            </p>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin: 20px 0;">
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #2c3e50, #34495e); border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: #3498db;">${activeAgents.length}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Agents</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #27ae60, #2ecc71); border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${totalWorkedDays}</div>
+                    <div style="font-size: 0.9em; color: white;">Jours travaillés</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #f39c12, #f1c40f); border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${globalWorkRate}%</div>
+                    <div style="font-size: 0.9em; color: white;">Taux global</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #9b59b6, #8e44ad); border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${(totalWorkedDays / activeAgents.length).toFixed(1)}</div>
+                    <div style="font-size: 0.9em; color: white;">Moyenne/agent</div>
+                </div>
+            </div>
+            
+            <h4>📈 Performance par Groupe</h4>
+            <div style="margin-top: 15px;">
+                ${Object.entries(groupStats)
+                    .sort(([groupA, statsA], [groupB, statsB]) => statsB.workRate - statsA.workRate)
+                    .map(([group, stats]) => {
+                        return `
+                            <div style="margin: 15px 0; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <h4 style="margin: 0;">Groupe ${group}</h4>
+                                    <span style="font-size: 1.2em; font-weight: bold; color: ${stats.workRate >= 80 ? '#27ae60' : stats.workRate >= 70 ? '#f39c12' : '#e74c3c'}">
+                                        ${stats.workRate}%
+                                    </span>
+                                </div>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px;">
+                                    <div>
+                                        <div style="font-size: 0.9em; color: #bdc3c7;">Agents</div>
+                                        <div style="font-weight: bold; color: #3498db;">${stats.agents}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.9em; color: #bdc3c7;">Jours travaillés</div>
+                                        <div style="font-weight: bold; color: #27ae60;">${stats.workedDays}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.9em; color: #bdc3c7;">Total jours</div>
+                                        <div style="font-weight: bold; color: #f39c12;">${stats.totalDays}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.9em; color: #bdc3c7;">Moyenne/agent</div>
+                                        <div style="font-weight: bold; color: #9b59b6;">${(stats.workedDays / stats.agents).toFixed(1)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+            </div>
+            
+            <div style="margin-top: 30px; padding: 15px; background: #34495e; border-radius: 8px;">
+                <h4 style="margin-top: 0;">📋 Recommandations</h4>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    ${Object.entries(groupStats)
+                        .filter(([group, stats]) => stats.workRate < 70)
+                        .map(([group, stats]) => 
+                            `<li style="color: #e74c3c;">⚠️ Groupe ${group} a un taux bas (${stats.workRate}%) - besoin d'analyse</li>`
+                        ).join('')}
+                    ${globalWorkRate < 75 ? 
+                        '<li style="color: #e74c3c;">⚠️ Taux global bas - nécessite une attention particulière</li>' : 
+                        '<li style="color: #27ae60;">✅ Taux global satisfaisant</li>'}
+                </ul>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📊 Jours Travaillés Global", html, `
+        <button class="popup-button blue" onclick="showWorkedDaysMenu()">↩️ Retour au menu</button>
+        <button class="popup-button green" onclick="exportWorkedDaysReport()">📤 Exporter</button>
+        <button class="popup-button gray" onclick="displayStatisticsMenu()">Retour</button>
+    `);
+}
+
+function showGroupStatsSelection() {
+    const groups = [...new Set(agents.filter(a => a.statut === 'actif').map(a => a.groupe))].sort();
+    
+    let html = `
+        <div class="info-section">
+            <h3>📉 Sélection du Groupe pour Statistiques</h3>
+            <div class="form-group">
+                <label>Sélectionner un groupe:</label>
+                <select id="selectedGroupForStats" class="form-input">
+                    <option value="">Sélectionner un groupe</option>
+                    ${groups.map(group => `<option value="${group}">Groupe ${group}</option>`).join('')}
+                    <option value="ALL">Tous les groupes</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Période:</label>
+                <select id="groupStatsPeriod" class="form-input">
+                    <option value="current_month">Ce mois</option>
+                    <option value="last_3_months">3 derniers mois</option>
+                    <option value="current_quarter">Ce trimestre</option>
+                    <option value="current_year">Cette année</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Type d'analyse:</label>
+                <select id="groupAnalysisType" class="form-input">
+                    <option value="performance">Performance</option>
+                    <option value="attendance">Présence/Absence</option>
+                    <option value="shifts">Répartition des shifts</option>
+                    <option value="comparison">Comparaison entre agents</option>
+                </select>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📉 Statistiques par Groupe", html, `
+        <button class="popup-button green" onclick="showSelectedGroupStats()">📊 Voir Statistiques</button>
+        <button class="popup-button blue" onclick="compareGroupsStats()">📈 Comparer Groupes</button>
+        <button class="popup-button gray" onclick="displayStatisticsMenu()">Annuler</button>
+    `);
+}
+
+function showSelectedGroupStats() {
+    const selectedGroup = document.getElementById('selectedGroupForStats').value;
+    const period = document.getElementById('groupStatsPeriod').value;
+    const analysisType = document.getElementById('groupAnalysisType').value;
+    
+    if (!selectedGroup) {
+        showSnackbar("⚠️ Veuillez sélectionner un groupe");
+        return;
+    }
+    
+    // Calculer la période
+    const today = new Date();
+    let startDate, endDate;
+    
+    switch(period) {
+        case 'current_month':
+            startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+            endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            break;
+        case 'last_3_months':
+            startDate = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+            endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            break;
+        case 'current_quarter':
+            const quarter = Math.floor(today.getMonth() / 3);
+            startDate = new Date(today.getFullYear(), quarter * 3, 1);
+            endDate = new Date(today.getFullYear(), (quarter + 1) * 3, 0);
+            break;
+        case 'current_year':
+            startDate = new Date(today.getFullYear(), 0, 1);
+            endDate = new Date(today.getFullYear(), 11, 31);
+            break;
+        default:
+            startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+            endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    }
+    
+    // Filtrer les agents
+    let groupAgents;
+    if (selectedGroup === 'ALL') {
+        groupAgents = agents.filter(a => a.statut === 'actif');
+    } else {
+        groupAgents = agents.filter(a => a.statut === 'actif' && a.groupe === selectedGroup);
+    }
+    
+    if (groupAgents.length === 0) {
+        showSnackbar("ℹ️ Aucun agent actif dans ce groupe");
+        return;
+    }
+    
+    // Calculer les statistiques du groupe
+    const groupStats = calculateGroupStats(groupAgents, startDate, endDate);
+    
+    if (analysisType === 'performance') {
+        showGroupPerformanceStats(selectedGroup, groupAgents, groupStats, period);
+    } else if (analysisType === 'attendance') {
+        showGroupAttendanceStats(selectedGroup, groupAgents, groupStats, period);
+    } else if (analysisType === 'shifts') {
+        showGroupShiftsStats(selectedGroup, groupAgents, groupStats, period);
+    } else {
+        showGroupComparisonStats(selectedGroup, groupAgents, groupStats, period);
+    }
+}
+
+function calculateGroupStats(groupAgents, startDate, endDate) {
+    const stats = {
+        totalAgents: groupAgents.length,
+        totalDays: 0,
+        workedDays: 0,
+        leaves: 0,
+        sickDays: 0,
+        otherAbsences: 0,
+        shifts: { '1': 0, '2': 0, '3': 0, 'R': 0, 'C': 0, 'M': 0, 'A': 0, '-': 0 },
+        byAgent: {}
+    };
+    
+    // Calculer pour chaque agent
+    groupAgents.forEach(agent => {
+        const agentStats = calculateAgentDetailedStats(agent.code, startDate, endDate);
+        stats.byAgent[agent.code] = agentStats;
+        
+        stats.totalDays += agentStats.totalDays;
+        stats.workedDays += agentStats.workedDays;
+        stats.leaves += agentStats.leaves;
+        stats.sickDays += agentStats.sickDays;
+        stats.otherAbsences += agentStats.otherAbsences;
+        
+        // Accumuler les shifts
+        Object.keys(agentStats.shifts).forEach(shift => {
+            stats.shifts[shift] = (stats.shifts[shift] || 0) + agentStats.shifts[shift];
+        });
+    });
+    
+    // Calculer les moyennes
+    stats.averageWorkRate = stats.totalDays > 0 ? ((stats.workedDays / stats.totalDays) * 100).toFixed(1) : 0;
+    stats.averageWorkedDaysPerAgent = (stats.workedDays / stats.totalAgents).toFixed(1);
+    stats.averageAbsenceRate = stats.totalDays > 0 ? 
+        (((stats.leaves + stats.sickDays + stats.otherAbsences) / stats.totalDays) * 100).toFixed(1) : 0;
+    
+    return stats;
+}
+
+function showGroupPerformanceStats(groupName, groupAgents, stats, period) {
+    // Trier les agents par performance
+    const sortedAgents = groupAgents.map(agent => ({
+        ...agent,
+        stats: stats.byAgent[agent.code],
+        workRate: stats.byAgent[agent.code] ? 
+            ((stats.byAgent[agent.code].workedDays / stats.byAgent[agent.code].totalDays) * 100).toFixed(1) : 0
+    })).sort((a, b) => b.workRate - a.workRate);
+    
+    let html = `
+        <div class="info-section">
+            <h3>📉 Performance du Groupe ${groupName === 'ALL' ? 'Tous' : groupName}</h3>
+            <p style="color: #7f8c8d;">Période: ${period === 'current_month' ? 'Ce mois' : 
+                               period === 'last_3_months' ? '3 derniers mois' : 
+                               period === 'current_quarter' ? 'Ce trimestre' : 'Cette année'}</p>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin: 20px 0;">
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #2c3e50, #34495e); border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: #3498db;">${stats.totalAgents}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Agents</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #27ae60, #2ecc71); border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${stats.averageWorkRate}%</div>
+                    <div style="font-size: 0.9em; color: white;">Taux travail moyen</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #f39c12, #f1c40f); border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${stats.averageWorkedDaysPerAgent}</div>
+                    <div style="font-size: 0.9em; color: white;">Jours travaillés/agent</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: linear-gradient(135deg, #e74c3c, #c0392b); border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${stats.averageAbsenceRate}%</div>
+                    <div style="font-size: 0.9em; color: white;">Taux absence moyen</div>
+                </div>
+            </div>
+            
+            <h4>🏆 Classement des Agents</h4>
+            <div style="margin-top: 15px;">
+                <table class="classement-table">
+                    <thead>
+                        <tr>
+                            <th>Rang</th>
+                            <th>Agent</th>
+                            <th>Taux travail</th>
+                            <th>Jours travaillés</th>
+                            <th>Congés</th>
+                            <th>Maladie</th>
+                            <th>Performance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sortedAgents.map((agent, index) => {
+                            const agentStats = stats.byAgent[agent.code];
+                            const workRate = agentStats ? 
+                                ((agentStats.workedDays / agentStats.totalDays) * 100).toFixed(1) : 0;
+                            
+                            let performanceColor = '#e74c3c';
+                            let performanceText = 'Faible';
+                            if (workRate >= 90) {
+                                performanceColor = '#27ae60';
+                                performanceText = 'Excellent';
+                            } else if (workRate >= 80) {
+                                performanceColor = '#2ecc71';
+                                performanceText = 'Bon';
+                            } else if (workRate >= 70) {
+                                performanceColor = '#f39c12';
+                                performanceText = 'Moyen';
+                            } else if (workRate >= 60) {
+                                performanceColor = '#e67e22';
+                                performanceText = 'Acceptable';
+                            }
+                            
+                            return `
+                                <tr>
+                                    <td class="rank-${index + 1}">${index + 1}</td>
+                                    <td>
+                                        <strong>${agent.nom} ${agent.prenom}</strong><br>
+                                        <small>${agent.code}</small>
+                                    </td>
+                                    <td style="font-weight: bold; color: ${performanceColor};">${workRate}%</td>
+                                    <td>${agentStats ? agentStats.workedDays : 0}/${agentStats ? agentStats.totalDays : 0}</td>
+                                    <td>${agentStats ? agentStats.leaves : 0}</td>
+                                    <td>${agentStats ? agentStats.sickDays : 0}</td>
+                                    <td>
+                                        <span style="background-color:${performanceColor}; color:white; padding:2px 8px; border-radius:12px; font-size:0.8em;">
+                                            ${performanceText}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style="margin-top: 30px; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                <h4 style="margin-top: 0;">📋 Recommandations pour le groupe</h4>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    ${sortedAgents.filter(a => {
+                        const stats = stats.byAgent[a.code];
+                        const workRate = stats ? ((stats.workedDays / stats.totalDays) * 100) : 0;
+                        return workRate < 70;
+                    }).map(agent => 
+                        `<li style="color: #e74c3c;">⚠️ ${agent.nom} ${agent.prenom} a un taux bas - besoin de suivi</li>`
+                    ).join('')}
+                    
+                    ${stats.averageWorkRate < 75 ? 
+                        '<li style="color: #e74c3c;">⚠️ Performance globale faible - plan d\'action nécessaire</li>' : 
+                        '<li style="color: #27ae60;">✅ Performance globale satisfaisante</li>'}
+                        
+                    ${sortedAgents.filter(a => {
+                        const stats = stats.byAgent[a.code];
+                        return stats && stats.sickDays > 5;
+                    }).map(agent =>
+                        `<li style="color: #f39c12;">🏥 ${agent.nom} ${agent.prenom} a beaucoup d\'absences maladie - vérifier sa santé</li>`
+                    ).join('')}
+                </ul>
+            </div>
+        </div>
+    `;
+    
+    openPopup(`📉 Performance Groupe ${groupName}`, html, `
+        <button class="popup-button blue" onclick="showGroupStatsSelection()">👥 Autre Groupe</button>
+        <button class="popup-button green" onclick="exportGroupStats('${groupName}')">📤 Exporter</button>
+        <button class="popup-button gray" onclick="displayStatisticsMenu()">Retour</button>
+    `);
+}
+
+function showMonthlyStats() {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    
+    let html = `
+        <div class="info-section">
+            <h3>📅 Statistiques Mensuelles</h3>
+            <div class="form-group">
+                <label>Sélectionner l'année:</label>
+                <select id="statsYear" class="form-input" onchange="updateMonthlyStats()">
+                    ${Array.from({length: 5}, (_, i) => currentYear - 2 + i).map(year => 
+                        `<option value="${year}" ${year === currentYear ? 'selected' : ''}>${year}</option>`
+                    ).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Groupe (optionnel):</label>
+                <select id="statsGroup" class="form-input" onchange="updateMonthlyStats()">
+                    <option value="ALL">Tous les groupes</option>
+                    <option value="A">Groupe A</option>
+                    <option value="B">Groupe B</option>
+                    <option value="C">Groupe C</option>
+                    <option value="D">Groupe D</option>
+                    <option value="E">Groupe E</option>
+                </select>
+            </div>
+            <div id="monthlyStatsContainer" style="margin-top: 20px;">
+                ${generateMonthlyStatsChart(currentYear, 'ALL')}
+            </div>
+        </div>
+    `;
+    
+    openPopup("📅 Statistiques Mensuelles", html, `
+        <button class="popup-button green" onclick="exportMonthlyStats()">📤 Exporter</button>
+        <button class="popup-button gray" onclick="displayStatisticsMenu()">Retour</button>
+    `);
+}
+
+function updateMonthlyStats() {
+    const year = parseInt(document.getElementById('statsYear').value);
+    const group = document.getElementById('statsGroup').value;
+    document.getElementById('monthlyStatsContainer').innerHTML = generateMonthlyStatsChart(year, group);
+}
+
+function generateMonthlyStatsChart(year, group) {
+    // Filtrer les agents si groupe spécifié
+    let filteredAgents = agents.filter(a => a.statut === 'actif');
+    if (group !== 'ALL') {
+        filteredAgents = filteredAgents.filter(a => a.groupe === group);
+    }
+    
+    if (filteredAgents.length === 0) {
+        return '<p style="text-align:center; color:#7f8c8d; padding:40px;">Aucun agent trouvé pour cette sélection</p>';
+    }
+    
+    // Calculer les statistiques pour chaque mois
+    const monthlyStats = [];
+    
+    for (let month = 1; month <= 12; month++) {
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0);
+        
+        let monthWorkedDays = 0;
+        let monthTotalDays = 0;
+        let monthLeaves = 0;
+        let monthSickDays = 0;
+        
+        // Pour chaque agent
+        filteredAgents.forEach(agent => {
+            const stats = calculateAgentDetailedStats(agent.code, startDate, endDate);
+            monthWorkedDays += stats.workedDays;
+            monthTotalDays += stats.totalDays;
+            monthLeaves += stats.leaves;
+            monthSickDays += stats.sickDays;
+        });
+        
+        const workRate = monthTotalDays > 0 ? ((monthWorkedDays / monthTotalDays) * 100).toFixed(1) : 0;
+        const absenceRate = monthTotalDays > 0 ? 
+            (((monthLeaves + monthSickDays) / monthTotalDays) * 100).toFixed(1) : 0;
+        
+        monthlyStats.push({
+            month: month,
+            monthName: getMonthName(month),
+            workedDays: monthWorkedDays,
+            totalDays: monthTotalDays,
+            workRate: parseFloat(workRate),
+            absenceRate: parseFloat(absenceRate),
+            leaves: monthLeaves,
+            sickDays: monthSickDays
+        });
+    }
+    
+    // Trouver les valeurs max pour l'échelle
+    const maxWorkRate = Math.max(...monthlyStats.map(s => s.workRate));
+    const maxAbsenceRate = Math.max(...monthlyStats.map(s => s.absenceRate));
+    
+    return `
+        <h4>📈 Évolution des performances - ${year} ${group !== 'ALL' ? `(Groupe ${group})` : ''}</h4>
+        
+        <div style="margin: 20px 0;">
+            <h5>Taux de travail (%)</h5>
+            <div style="display: flex; align-items: flex-end; height: 200px; border-left: 2px solid #34495e; border-bottom: 2px solid #34495e; padding-left: 5px;">
+                ${monthlyStats.map(stat => {
+                    const barHeight = maxWorkRate > 0 ? (stat.workRate / maxWorkRate * 180) : 0;
+                    const barColor = stat.workRate >= 80 ? '#27ae60' : 
+                                    stat.workRate >= 70 ? '#f39c12' : '#e74c3c';
+                    return `
+                        <div style="margin-right: 10px; text-align: center; position: relative;">
+                            <div style="width: 30px; height: ${barHeight}px; background-color: ${barColor}; 
+                                 border-radius: 3px 3px 0 0; margin: 0 auto;"></div>
+                            <div style="font-size: 0.8em; margin-top: 5px; transform: rotate(-45deg); transform-origin: top left;">
+                                ${stat.monthName.substring(0, 3)}
+                            </div>
+                            <div style="position: absolute; top: ${barHeight - 20}px; left: 50%; transform: translateX(-50%);
+                                 font-size: 0.7em; font-weight: bold; color: white; background: rgba(0,0,0,0.7); 
+                                 padding: 2px 4px; border-radius: 2px; white-space: nowrap;">
+                                ${stat.workRate}%
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+        
+        <div style="margin: 30px 0;">
+            <h5>Taux d'absence (%)</h5>
+            <div style="display: flex; align-items: flex-end; height: 150px; border-left: 2px solid #34495e; border-bottom: 2px solid #34495e; padding-left: 5px;">
+                ${monthlyStats.map(stat => {
+                    const barHeight = maxAbsenceRate > 0 ? (stat.absenceRate / maxAbsenceRate * 130) : 0;
+                    const barColor = stat.absenceRate <= 5 ? '#27ae60' : 
+                                    stat.absenceRate <= 10 ? '#f39c12' : '#e74c3c';
+                    return `
+                        <div style="margin-right: 10px; text-align: center; position: relative;">
+                            <div style="width: 30px; height: ${barHeight}px; background-color: ${barColor}; 
+                                 border-radius: 3px 3px 0 0; margin: 0 auto;"></div>
+                            <div style="font-size: 0.8em; margin-top: 5px; transform: rotate(-45deg); transform-origin: top left;">
+                                ${stat.monthName.substring(0, 3)}
+                            </div>
+                            <div style="position: absolute; top: ${barHeight - 20}px; left: 50%; transform: translateX(-50%);
+                                 font-size: 0.7em; font-weight: bold; color: white; background: rgba(0,0,0,0.7); 
+                                 padding: 2px 4px; border-radius: 2px; white-space: nowrap;">
+                                ${stat.absenceRate}%
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <h5>📋 Résumé par mois</h5>
+            <div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">
+                <table class="classement-table">
+                    <thead>
+                        <tr>
+                            <th>Mois</th>
+                            <th>Taux travail</th>
+                            <th>Taux absence</th>
+                            <th>Congés</th>
+                            <th>Maladie</th>
+                            <th>Performance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${monthlyStats.map(stat => {
+                            let performanceColor = '#e74c3c';
+                            let performanceText = 'Faible';
+                            if (stat.workRate >= 85 && stat.absenceRate <= 5) {
+                                performanceColor = '#27ae60';
+                                performanceText = 'Excellent';
+                            } else if (stat.workRate >= 75 && stat.absenceRate <= 10) {
+                                performanceColor = '#2ecc71';
+                                performanceText = 'Bon';
+                            } else if (stat.workRate >= 65 && stat.absenceRate <= 15) {
+                                performanceColor = '#f39c12';
+                                performanceText = 'Moyen';
+                            } else if (stat.workRate >= 55 && stat.absenceRate <= 20) {
+                                performanceColor = '#e67e22';
+                                performanceText = 'Acceptable';
+                            }
+                            
+                            return `
+                                <tr>
+                                    <td>${stat.monthName}</td>
+                                    <td style="font-weight: bold; color: ${stat.workRate >= 80 ? '#27ae60' : stat.workRate >= 70 ? '#f39c12' : '#e74c3c'}">
+                                        ${stat.workRate}%
+                                    </td>
+                                    <td style="font-weight: bold; color: ${stat.absenceRate <= 5 ? '#27ae60' : stat.absenceRate <= 10 ? '#f39c12' : '#e74c3c'}">
+                                        ${stat.absenceRate}%
+                                    </td>
+                                    <td>${stat.leaves}</td>
+                                    <td>${stat.sickDays}</td>
+                                    <td>
+                                        <span style="background-color:${performanceColor}; color:white; padding:2px 8px; border-radius:12px; font-size:0.8em;">
+                                            ${performanceText}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div style="margin-top: 20px; padding: 15px; background: #2c3e50; border-radius: 8px;">
+            <h5 style="margin-top: 0;">📊 Statistiques annuelles</h5>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 10px;">
+                <div style="text-align: center;">
+                    <div style="font-size: 1.2em; font-weight: bold; color: #3498db;">
+                        ${(monthlyStats.reduce((sum, stat) => sum + stat.workRate, 0) / 12).toFixed(1)}%
+                    </div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Moyenne travail</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 1.2em; font-weight: bold; color: #f39c12;">
+                        ${monthlyStats.reduce((sum, stat) => sum + stat.leaves, 0)}
+                    </div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Congés totaux</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 1.2em; font-weight: bold; color: #e74c3c;">
+                        ${monthlyStats.reduce((sum, stat) => sum + stat.sickDays, 0)}
+                    </div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Maladie totale</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 1.2em; font-weight: bold; color: #9b59b6;">
+                        ${monthlyStats.filter(stat => stat.workRate >= 80).length}
+                    </div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Mois excellents</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+// === MODULE CONGÉS - IMPLÉMENTATIONS COMPLÈTES ===
+
+function showDeleteLeaveForm() {
+    // Récupérer tous les congés enregistrés
+    const allLeaves = [];
+    
+    // Congés ponctuels
+    Object.keys(planningData).forEach(monthKey => {
+        Object.keys(planningData[monthKey]).forEach(agentCode => {
+            Object.keys(planningData[monthKey][agentCode]).forEach(dateStr => {
+                const record = planningData[monthKey][agentCode][dateStr];
+                if (['C', 'M', 'A'].includes(record.shift)) {
+                    allLeaves.push({
+                        type: 'single',
+                        agentCode: agentCode,
+                        date: dateStr,
+                        shift: record.shift,
+                        comment: record.comment,
+                        record: record,
+                        monthKey: monthKey
+                    });
+                }
+            });
+        });
+    });
+    
+    // Congés sur période
+    if (leaves && leaves.length > 0) {
+        leaves.forEach(leave => {
+            allLeaves.push({
+                type: 'period',
+                agentCode: leave.agent_code,
+                startDate: leave.start_date,
+                endDate: leave.end_date,
+                comment: leave.comment,
+                record: leave
+            });
+        });
+    }
+    
+    if (allLeaves.length === 0) {
+        showSnackbar("ℹ️ Aucun congé à supprimer");
+        return;
+    }
+    
+    let html = `
+        <div class="info-section">
+            <h3>🗑️ Supprimer un Congé/Absence</h3>
+            <p style="color: #e74c3c; font-size: 0.9em; margin-bottom: 15px;">
+                ⚠️ Attention: Cette action est irréversible
+            </p>
+            
+            <div style="margin-bottom: 15px;">
+                <input type="text" id="searchDeleteLeave" placeholder="Rechercher agent..." 
+                       style="width:100%; padding:10px; border-radius:5px; border:none;"
+                       onkeyup="filterDeleteLeaves()">
+                <select id="filterDeleteLeaveType" style="width:100%; padding:10px; margin-top:10px; border-radius:5px; border:none;"
+                        onchange="filterDeleteLeaves()">
+                    <option value="all">Tous les types</option>
+                    <option value="C">Congés</option>
+                    <option value="M">Maladie</option>
+                    <option value="A">Autre absence</option>
+                    <option value="period">Période</option>
+                </select>
+            </div>
+            
+            <div id="deleteLeavesContainer" style="max-height: 400px; overflow-y: auto;">
+                ${generateDeleteLeavesList(allLeaves)}
+            </div>
+        </div>
+    `;
+    
+    openPopup("🗑️ Supprimer Congé", html, `
+        <button class="popup-button gray" onclick="displayLeavesMenu()">Retour</button>
+    `);
+}
+
+function generateDeleteLeavesList(leavesList, filterText = '', filterType = 'all') {
+    // Appliquer les filtres
+    let filteredLeaves = leavesList;
+    
+    if (filterText) {
+        const searchLower = filterText.toLowerCase();
+        filteredLeaves = filteredLeaves.filter(leave => {
+            const agent = agents.find(a => a.code === leave.agentCode);
+            const agentName = agent ? `${agent.nom} ${agent.prenom}`.toLowerCase() : '';
+            return agentName.includes(searchLower) || 
+                   leave.agentCode.toLowerCase().includes(searchLower);
+        });
+    }
+    
+    if (filterType !== 'all') {
+        if (filterType === 'period') {
+            filteredLeaves = filteredLeaves.filter(leave => leave.type === 'period');
+        } else {
+            filteredLeaves = filteredLeaves.filter(leave => leave.shift === filterType);
+        }
+    }
+    
+    if (filteredLeaves.length === 0) {
+        return '<p style="text-align:center; color:#7f8c8d; padding:20px;">Aucun congé trouvé</p>';
+    }
+    
+    // Grouper par agent pour une meilleure présentation
+    const leavesByAgent = {};
+    filteredLeaves.forEach(leave => {
+        if (!leavesByAgent[leave.agentCode]) {
+            leavesByAgent[leave.agentCode] = [];
+        }
+        leavesByAgent[leave.agentCode].push(leave);
+    });
+    
+    return Object.keys(leavesByAgent).map(agentCode => {
+        const agent = agents.find(a => a.code === agentCode);
+        const agentName = agent ? `${agent.nom} ${agent.prenom}` : agentCode;
+        const agentLeaves = leavesByAgent[agentCode];
+        
+        return `
+            <div style="margin-bottom: 20px; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                <h4 style="margin-top: 0; margin-bottom: 15px;">
+                    ${agentName} <small style="color: #7f8c8d;">(${agentCode})</small>
+                </h4>
+                <div style="display: grid; gap: 10px;">
+                    ${agentLeaves.map(leave => {
+                        let leaveInfo = '';
+                        let deleteFunction = '';
+                        
+                        if (leave.type === 'period') {
+                            leaveInfo = `
+                                <div style="display: flex; justify-content: space-between; align-items: center; 
+                                     padding: 10px; background: #34495e; border-radius: 5px;">
+                                    <div>
+                                        <strong>Période:</strong> ${leave.startDate} au ${leave.endDate}<br>
+                                        <small style="color: #bdc3c7;">${leave.comment || 'Aucun commentaire'}</small>
+                                    </div>
+                                    <button class="action-btn small red" onclick="deletePeriodLeave('${leave.agentCode}', '${leave.startDate}')">
+                                        🗑️ Supprimer
+                                    </button>
+                                </div>
+                            `;
+                        } else {
+                            const shiftLabel = SHIFT_LABELS[leave.shift];
+                            const shiftColor = SHIFT_COLORS[leave.shift];
+                            leaveInfo = `
+                                <div style="display: flex; justify-content: space-between; align-items: center; 
+                                     padding: 10px; background: #34495e; border-radius: 5px;">
+                                    <div>
+                                        <strong>${leave.date}</strong><br>
+                                        <span style="background-color:${shiftColor}; color:white; padding:2px 8px; border-radius:12px; font-size:0.8em;">
+                                            ${shiftLabel}
+                                        </span>
+                                        <br>
+                                        <small style="color: #bdc3c7;">${leave.comment || 'Aucun commentaire'}</small>
+                                    </div>
+                                    <button class="action-btn small red" onclick="deleteSingleLeave('${leave.agentCode}', '${leave.date}')">
+                                        🗑️ Supprimer
+                                    </button>
+                                </div>
+                            `;
+                        }
+                        
+                        return leaveInfo;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function filterDeleteLeaves() {
+    const filterText = document.getElementById('searchDeleteLeave').value;
+    const filterType = document.getElementById('filterDeleteLeaveType').value;
+    
+    // Reconstruire la liste des congés
+    const allLeaves = [];
+    
+    Object.keys(planningData).forEach(monthKey => {
+        Object.keys(planningData[monthKey]).forEach(agentCode => {
+            Object.keys(planningData[monthKey][agentCode]).forEach(dateStr => {
+                const record = planningData[monthKey][agentCode][dateStr];
+                if (['C', 'M', 'A'].includes(record.shift)) {
+                    allLeaves.push({
+                        type: 'single',
+                        agentCode: agentCode,
+                        date: dateStr,
+                        shift: record.shift,
+                        comment: record.comment,
+                        record: record,
+                        monthKey: monthKey
+                    });
+                }
+            });
+        });
+    });
+    
+    if (leaves && leaves.length > 0) {
+        leaves.forEach(leave => {
+            allLeaves.push({
+                type: 'period',
+                agentCode: leave.agent_code,
+                startDate: leave.start_date,
+                endDate: leave.end_date,
+                comment: leave.comment,
+                record: leave
+            });
+        });
+    }
+    
+    document.getElementById('deleteLeavesContainer').innerHTML = 
+        generateDeleteLeavesList(allLeaves, filterText, filterType);
+}
+
+function deleteSingleLeave(agentCode, dateStr) {
+    if (!confirm(`Supprimer le congé de ${agentCode} du ${dateStr} ?`)) {
+        return;
+    }
+    
+    const monthKey = dateStr.substring(0, 7);
+    if (planningData[monthKey] && 
+        planningData[monthKey][agentCode] && 
+        planningData[monthKey][agentCode][dateStr]) {
+        
+        delete planningData[monthKey][agentCode][dateStr];
+        saveData();
+        showSnackbar(`✅ Congé supprimé pour ${agentCode} le ${dateStr}`);
+        
+        // Recharger la liste
+        showDeleteLeaveForm();
+    }
+}
+
+function deletePeriodLeave(agentCode, startDate) {
+    if (!confirm(`Supprimer le congé sur période de ${agentCode} commençant le ${startDate} ?`)) {
+        return;
+    }
+    
+    if (leaves) {
+        const leaveIndex = leaves.findIndex(l => l.agent_code === agentCode && l.start_date === startDate);
+        if (leaveIndex !== -1) {
+            const leave = leaves[leaveIndex];
+            
+            // Supprimer également les entrées dans planningData
+            const start = new Date(leave.start_date);
+            const end = new Date(leave.end_date);
+            const current = new Date(start);
+            
+            while (current <= end) {
+                const dateStr = current.toISOString().split('T')[0];
+                const monthKey = dateStr.substring(0, 7);
+                
+                if (planningData[monthKey] && 
+                    planningData[monthKey][agentCode] && 
+                    planningData[monthKey][agentCode][dateStr]) {
+                    
+                    delete planningData[monthKey][agentCode][dateStr];
+                }
+                
+                current.setDate(current.getDate() + 1);
+            }
+            
+            // Supprimer l'enregistrement de congé
+            leaves.splice(leaveIndex, 1);
+            saveData();
+            showSnackbar(`✅ Congé sur période supprimé pour ${agentCode}`);
+            
+            // Recharger la liste
+            showDeleteLeaveForm();
+        }
+    }
+}
+
+function showGroupLeavesSelection() {
+    const groups = [...new Set(agents.filter(a => a.statut === 'actif').map(a => a.groupe))].sort();
+    
+    let html = `
+        <div class="info-section">
+            <h3>📊 Congés par Groupe</h3>
+            <div class="form-group">
+                <label>Sélectionner un groupe:</label>
+                <select id="selectedGroupForLeaves" class="form-input">
+                    <option value="">Sélectionner un groupe</option>
+                    ${groups.map(group => `<option value="${group}">Groupe ${group}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Période:</label>
+                <select id="groupLeavesPeriod" class="form-input">
+                    <option value="current_month">Ce mois</option>
+                    <option value="last_month">Mois dernier</option>
+                    <option value="current_quarter">Ce trimestre</option>
+                    <option value="current_year">Cette année</option>
+                    <option value="custom">Personnalisée</option>
+                </select>
+            </div>
+            <div id="customPeriodGroup" style="display: none; margin-top: 15px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <input type="date" id="groupLeavesStartDate" class="form-input" 
+                           value="${new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]}">
+                    <input type="date" id="groupLeavesEndDate" class="form-input" 
+                           value="${new Date().toISOString().split('T')[0]}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Type d'absence:</label>
+                <select id="groupLeavesType" class="form-input">
+                    <option value="all">Tous les types</option>
+                    <option value="C">Congés payés</option>
+                    <option value="M">Maladie</option>
+                    <option value="A">Autre absence</option>
+                </select>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📊 Congés par Groupe", html, `
+        <button class="popup-button green" onclick="showSelectedGroupLeaves()">📋 Voir Congés</button>
+        <button class="popup-button blue" onclick="showGroupLeavesStats()">📈 Statistiques</button>
+        <button class="popup-button gray" onclick="displayLeavesMenu()">Annuler</button>
+    `);
+    
+    // Afficher/masquer les dates personnalisées
+    document.getElementById('groupLeavesPeriod').addEventListener('change', function() {
+        document.getElementById('customPeriodGroup').style.display = 
+            this.value === 'custom' ? 'block' : 'none';
+    });
+}
+
+function showSelectedGroupLeaves() {
+    const selectedGroup = document.getElementById('selectedGroupForLeaves').value;
+    const period = document.getElementById('groupLeavesPeriod').value;
+    const leavesType = document.getElementById('groupLeavesType').value;
+    
+    if (!selectedGroup) {
+        showSnackbar("⚠️ Veuillez sélectionner un groupe");
+        return;
+    }
+    
+    // Calculer la période
+    const today = new Date();
+    let startDate, endDate;
+    
+    if (period === 'custom') {
+        startDate = new Date(document.getElementById('groupLeavesStartDate').value);
+        endDate = new Date(document.getElementById('groupLeavesEndDate').value);
+    } else {
+        switch(period) {
+            case 'current_month':
+                startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                break;
+            case 'last_month':
+                startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+                break;
+            case 'current_quarter':
+                const quarter = Math.floor(today.getMonth() / 3);
+                startDate = new Date(today.getFullYear(), quarter * 3, 1);
+                endDate = new Date(today.getFullYear(), (quarter + 1) * 3, 0);
+                break;
+            case 'current_year':
+                startDate = new Date(today.getFullYear(), 0, 1);
+                endDate = new Date(today.getFullYear(), 11, 31);
+                break;
+            default:
+                startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        }
+    }
+    
+    // Filtrer les agents du groupe
+    const groupAgents = agents.filter(a => a.statut === 'actif' && a.groupe === selectedGroup);
+    
+    if (groupAgents.length === 0) {
+        showSnackbar("ℹ️ Aucun agent actif dans ce groupe");
+        return;
+    }
+    
+    // Collecter tous les congés du groupe
+    const groupLeaves = [];
+    
+    groupAgents.forEach(agent => {
+        // Congés ponctuels
+        Object.keys(planningData).forEach(monthKey => {
+            if (planningData[monthKey][agent.code]) {
+                Object.keys(planningData[monthKey][agent.code]).forEach(dateStr => {
+                    const record = planningData[monthKey][agent.code][dateStr];
+                    if (['C', 'M', 'A'].includes(record.shift)) {
+                        const leaveDate = new Date(dateStr);
+                        if (leaveDate >= startDate && leaveDate <= endDate) {
+                            if (leavesType === 'all' || record.shift === leavesType) {
+                                groupLeaves.push({
+                                    agentCode: agent.code,
+                                    agentName: `${agent.nom} ${agent.prenom}`,
+                                    date: dateStr,
+                                    type: record.shift,
+                                    comment: record.comment,
+                                    record: record
+                                });
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        
+        // Congés sur période
+        if (leaves) {
+            leaves.filter(l => l.agent_code === agent.code).forEach(leave => {
+                const leaveStart = new Date(leave.start_date);
+                const leaveEnd = new Date(leave.end_date);
+                
+                // Vérifier si la période chevauche la période sélectionnée
+                if ((leaveStart >= startDate && leaveStart <= endDate) || 
+                    (leaveEnd >= startDate && leaveEnd <= endDate) ||
+                    (leaveStart <= startDate && leaveEnd >= endDate)) {
+                    
+                    if (leavesType === 'all' || leavesType === 'C') {
+                        groupLeaves.push({
+                            agentCode: agent.code,
+                            agentName: `${agent.nom} ${agent.prenom}`,
+                            date: `${leave.start_date} au ${leave.end_date}`,
+                            type: 'PERIODE',
+                            comment: leave.comment,
+                            record: leave
+                        });
+                    }
+                }
+            });
+        }
+    });
+    
+    // Trier par date
+    groupLeaves.sort((a, b) => {
+        if (a.type === 'PERIODE' && b.type === 'PERIODE') {
+            return new Date(a.record.start_date) - new Date(b.record.start_date);
+        } else if (a.type === 'PERIODE') {
+            return -1;
+        } else if (b.type === 'PERIODE') {
+            return 1;
+        } else {
+            return new Date(a.date) - new Date(b.date);
+        }
+    });
+    
+    if (groupLeaves.length === 0) {
+        showSnackbar(`ℹ️ Aucun congé trouvé pour le groupe ${selectedGroup} sur cette période`);
+        return;
+    }
+    
+    // Calculer les statistiques
+    const stats = {
+        total: groupLeaves.length,
+        byType: { C: 0, M: 0, A: 0, PERIODE: 0 },
+        byAgent: {}
+    };
+    
+    groupLeaves.forEach(leave => {
+        stats.byType[leave.type] = (stats.byType[leave.type] || 0) + 1;
+        stats.byAgent[leave.agentCode] = (stats.byAgent[leave.agentCode] || 0) + 1;
+    });
+    
+    let html = `
+        <div class="info-section">
+            <h3>📊 Congés du Groupe ${selectedGroup}</h3>
+            <p style="color: #7f8c8d;">
+                Période: ${startDate.toLocaleDateString('fr-FR')} au ${endDate.toLocaleDateString('fr-FR')}
+                ${leavesType !== 'all' ? ` | Type: ${SHIFT_LABELS[leavesType] || leavesType}` : ''}
+            </p>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0;">
+                <div style="text-align: center; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: #3498db;">${groupAgents.length}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Agents dans le groupe</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: #f39c12; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${stats.total}</div>
+                    <div style="font-size: 0.9em; color: white;">Congés/absences</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: #e74c3c; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${Object.keys(stats.byAgent).length}</div>
+                    <div style="font-size: 0.9em; color: white;">Agents concernés</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: #9b59b6; border-radius: 8px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">
+                        ${(stats.total / groupAgents.length).toFixed(1)}
+                    </div>
+                    <div style="font-size: 0.9em; color: white;">Moyenne par agent</div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+                <div>
+                    <h4>📈 Répartition par type</h4>
+                    <div style="margin-top: 10px;">
+                        ${Object.entries(stats.byType)
+                            .filter(([type, count]) => count > 0)
+                            .map(([type, count]) => {
+                                const percentage = ((count / stats.total) * 100).toFixed(1);
+                                const color = type === 'PERIODE' ? '#3498db' : SHIFT_COLORS[type] || '#7f8c8d';
+                                const label = type === 'PERIODE' ? 'Congés période' : SHIFT_LABELS[type] || type;
+                                return `
+                                    <div style="margin: 10px 0;">
+                                        <div style="display: flex; justify-content: space-between;">
+                                            <span>
+                                                <span style="display: inline-block; width: 12px; height: 12px; 
+                                                      background-color: ${color}; border-radius: 2px; margin-right: 8px;"></span>
+                                                ${label}
+                                            </span>
+                                            <span style="font-weight: bold;">${count} (${percentage}%)</span>
+                                        </div>
+                                        <div style="height: 8px; background: #34495e; border-radius: 4px; overflow: hidden; margin-top: 2px;">
+                                            <div style="height: 100%; width: ${percentage}%; background: ${color}; border-radius: 4px;"></div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                    </div>
+                </div>
+                
+                <div>
+                    <h4>👥 Agents avec le plus de congés</h4>
+                    <div style="margin-top: 10px;">
+                        ${Object.entries(stats.byAgent)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 5)
+                            .map(([agentCode, count], index) => {
+                                const agent = agents.find(a => a.code === agentCode);
+                                const agentName = agent ? `${agent.nom} ${agent.prenom}` : agentCode;
+                                const rankColors = ['#f1c40f', '#95a5a6', '#d35400', '#7f8c8d', '#34495e'];
+                                return `
+                                    <div style="display: flex; align-items: center; margin: 10px 0; padding: 10px; background: #2c3e50; border-radius: 5px;">
+                                        <div style="width: 30px; height: 30px; background: ${rankColors[index]}; color: white; 
+                                             border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+                                             font-weight: bold; margin-right: 10px;">
+                                            ${index + 1}
+                                        </div>
+                                        <div style="flex-grow: 1;">
+                                            <div style="font-weight: bold;">${agentName}</div>
+                                            <div style="font-size: 0.9em; color: #bdc3c7;">${agentCode}</div>
+                                        </div>
+                                        <div style="font-weight: bold; color: #e74c3c;">
+                                            ${count} congé(s)
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                    </div>
+                </div>
+            </div>
+            
+            <h4>📋 Liste détaillée des congés</h4>
+            <div style="max-height: 300px; overflow-y: auto; margin-top: 10px;">
+                <table class="classement-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Agent</th>
+                            <th>Type</th>
+                            <th>Commentaire</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${groupLeaves.map(leave => {
+                            const typeColor = leave.type === 'PERIODE' ? '#3498db' : SHIFT_COLORS[leave.type] || '#7f8c8d';
+                            const typeLabel = leave.type === 'PERIODE' ? 'Congé période' : SHIFT_LABELS[leave.type] || leave.type;
+                            return `
+                                <tr>
+                                    <td nowrap>${leave.date}</td>
+                                    <td>
+                                        <strong>${leave.agentName}</strong><br>
+                                        <small>${leave.agentCode}</small>
+                                    </td>
+                                    <td>
+                                        <span style="background-color:${typeColor}; color:white; padding:2px 8px; border-radius:12px; font-size:0.8em;">
+                                            ${typeLabel}
+                                        </span>
+                                    </td>
+                                    <td>${leave.comment || '-'}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+    
+    openPopup(`📊 Congés Groupe ${selectedGroup}`, html, `
+        <button class="popup-button blue" onclick="showGroupLeavesSelection()">👥 Autre Groupe</button>
+        <button class="popup-button green" onclick="exportGroupLeaves('${selectedGroup}')">📤 Exporter</button>
+        <button class="popup-button gray" onclick="displayLeavesMenu()">Retour</button>
+    `);
+}
+
+function generateFullReport() {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    
+    let html = `
+        <div class="info-section">
+            <h3>📋 Rapport Complet du Système</h3>
+            <p style="color: #7f8c8d;">Génération en cours...</p>
+            
+            <div id="reportProgress" style="margin: 20px 0;">
+                <div style="background: #34495e; height: 20px; border-radius: 10px; overflow: hidden;">
+                    <div id="progressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3498db, #2ecc71); 
+                         transition: width 0.3s;"></div>
+                </div>
+                <div id="progressText" style="text-align: center; margin-top: 10px; color: #7f8c8d;">
+                    Préparation du rapport...
+                </div>
+            </div>
+            
+            <div id="reportContent" style="display: none;">
+                <!-- Le contenu sera généré dynamiquement -->
+            </div>
+        </div>
+    `;
+    
+    openPopup("📋 Rapport Complet", html, `
+        <button class="popup-button green" id="generateReportBtn" onclick="startReportGeneration()">🚀 Générer</button>
+        <button class="popup-button gray" onclick="displayStatisticsMenu()">Annuler</button>
+    `);
+}
+
+function startReportGeneration() {
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const generateBtn = document.getElementById('generateReportBtn');
+    
+    // Désactiver le bouton pendant la génération
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = '⏳ Génération...';
+    
+    // Simuler la progression
+    let progress = 0;
+    const interval = setInterval(() => {
+        progress += 10;
+        progressBar.style.width = progress + '%';
+        
+        if (progress <= 30) {
+            progressText.textContent = "Collecte des données agents...";
+        } else if (progress <= 60) {
+            progressText.textContent = "Analyse des plannings...";
+        } else if (progress <= 90) {
+            progressText.textContent = "Génération des statistiques...";
+        } else {
+            progressText.textContent = "Finalisation du rapport...";
+        }
+        
+        if (progress >= 100) {
+            clearInterval(interval);
+            setTimeout(() => {
+                showFullReport();
+            }, 500);
+        }
+    }, 200);
+}
+
+function showFullReport() {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    
+    // Calculer les statistiques globales
+    const activeAgents = agents.filter(a => a.statut === 'actif');
+    const inactiveAgents = agents.filter(a => a.statut === 'inactif');
+    
+    // Statistiques par groupe
+    const groupStats = {};
+    activeAgents.forEach(agent => {
+        if (!groupStats[agent.groupe]) {
+            groupStats[agent.groupe] = {
+                count: 0,
+                postes: {},
+                leaves: 0,
+                warnings: 0
+            };
+        }
+        groupStats[agent.groupe].count++;
+        
+        // Postes
+        const poste = agent.poste || 'Non spécifié';
+        groupStats[agent.groupe].postes[poste] = (groupStats[agent.groupe].postes[poste] || 0) + 1;
+        
+        // Congés cette année
+        let agentLeaves = 0;
+        Object.keys(planningData).forEach(monthKey => {
+            if (monthKey.startsWith(currentYear.toString()) && planningData[monthKey][agent.code]) {
+                Object.keys(planningData[monthKey][agent.code]).forEach(dateStr => {
+                    const record = planningData[monthKey][agent.code][dateStr];
+                    if (['C', 'M', 'A'].includes(record.shift)) {
+                        agentLeaves++;
+                    }
+                });
+            }
+        });
+        groupStats[agent.groupe].leaves += agentLeaves;
+        
+        // Avertissements
+        if (warnings) {
+            const agentWarnings = warnings.filter(w => 
+                w.agent_code === agent.code && w.status === 'active'
+            ).length;
+            groupStats[agent.groupe].warnings += agentWarnings;
+        }
+    });
+    
+    // Congés totaux cette année
+    let totalLeavesThisYear = 0;
+    Object.keys(planningData).forEach(monthKey => {
+        if (monthKey.startsWith(currentYear.toString())) {
+            Object.keys(planningData[monthKey]).forEach(agentCode => {
+                Object.keys(planningData[monthKey][agentCode]).forEach(dateStr => {
+                    const record = planningData[monthKey][agentCode][dateStr];
+                    if (['C', 'M', 'A'].includes(record.shift)) {
+                        totalLeavesThisYear++;
+                    }
+                });
+            });
+        }
+    });
+    
+    // Avertissements actifs
+    const activeWarnings = warnings ? warnings.filter(w => w.status === 'active').length : 0;
+    
+    let html = `
+        <div class="info-section">
+            <h2>📋 Rapport Complet SGA - ${currentYear}</h2>
+            <p style="color: #7f8c8d;">Généré le ${today.toLocaleDateString('fr-FR')} à ${today.toLocaleTimeString('fr-FR')}</p>
+            
+            <div style="border: 2px solid #34495e; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #3498db;">📊 Vue d'ensemble</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <div style="text-align: center; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                        <div style="font-size: 2em; font-weight: bold; color: #3498db;">${activeAgents.length}</div>
+                        <div style="font-size: 0.9em; color: #bdc3c7;">Agents actifs</div>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                        <div style="font-size: 2em; font-weight: bold; color: #f39c12;">${inactiveAgents.length}</div>
+                        <div style="font-size: 0.9em; color: #bdc3c7;">Agents inactifs</div>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                        <div style="font-size: 2em; font-weight: bold; color: #e74c3c;">${totalLeavesThisYear}</div>
+                        <div style="font-size: 0.9em; color: #bdc3c7;">Congés ${currentYear}</div>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: #2c3e50; border-radius: 8px;">
+                        <div style="font-size: 2em; font-weight: bold; color: #9b59b6;">${activeWarnings}</div>
+                        <div style="font-size: 0.9em; color: #bdc3c7;">Avertissements actifs</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="border: 2px solid #34495e; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #27ae60;">👥 Répartition par Groupe</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 15px;">
+                    ${Object.entries(groupStats)
+                        .sort(([groupA, statsA], [groupB, statsB]) => statsB.count - statsA.count)
+                        .map(([group, stats]) => `
+                            <div style="padding: 15px; background: #2c3e50; border-radius: 8px;">
+                                <h4 style="margin-top: 0; color: #f39c12;">Groupe ${group}</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                                    <div>
+                                        <div style="font-size: 0.9em; color: #bdc3c7;">Agents</div>
+                                        <div style="font-size: 1.5em; font-weight: bold; color: #3498db;">${stats.count}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.9em; color: #bdc3c7;">Congés</div>
+                                        <div style="font-size: 1.5em; font-weight: bold; color: #e74c3c;">${stats.leaves}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.9em; color: #bdc3c7;">Avertissements</div>
+                                        <div style="font-size: 1.5em; font-weight: bold; color: #9b59b6;">${stats.warnings}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.9em; color: #bdc3c7;">Moy. congés/agent</div>
+                                        <div style="font-size: 1.5em; font-weight: bold; color: #f39c12;">
+                                            ${(stats.leaves / stats.count).toFixed(1)}
+                                        </div>
+                                    </div>
+                                </div>
+                                ${Object.keys(stats.postes).length > 0 ? `
+                                    <div style="margin-top: 15px;">
+                                        <div style="font-size: 0.9em; color: #bdc3c7;">Postes:</div>
+                                        <div style="font-size: 0.9em; color: #7f8c8d; margin-top: 5px;">
+                                            ${Object.entries(stats.postes)
+                                                .map(([poste, count]) => `${poste}: ${count}`)
+                                                .join(', ')}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                </div>
+            </div>
+            
+            <div style="border: 2px solid #34495e; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #f39c12;">📅 Activité Mensuelle - ${currentYear}</h3>
+                <div style="margin-top: 15px;">
+                    ${(() => {
+                        // Calculer l'activité mensuelle
+                        const monthlyActivity = [];
+                        for (let month = 1; month <= 12; month++) {
+                            const monthKey = `${currentYear}-${month.toString().padStart(2, '0')}`;
+                            let monthLeaves = 0;
+                            let monthShifts = 0;
+                            
+                            if (planningData[monthKey]) {
+                                Object.keys(planningData[monthKey]).forEach(agentCode => {
+                                    Object.keys(planningData[monthKey][agentCode]).forEach(dateStr => {
+                                        const record = planningData[monthKey][agentCode][dateStr];
+                                        if (['C', 'M', 'A'].includes(record.shift)) {
+                                            monthLeaves++;
+                                        } else if (['1', '2', '3'].includes(record.shift)) {
+                                            monthShifts++;
+                                        }
+                                    });
+                                });
+                            }
+                            
+                            monthlyActivity.push({
+                                month: month,
+                                monthName: getMonthName(month),
+                                leaves: monthLeaves,
+                                shifts: monthShifts,
+                                activityRate: activeAgents.length > 0 ? 
+                                    ((monthShifts / (activeAgents.length * 30)) * 100).toFixed(1) : 0
+                            });
+                        }
+                        
+                        // Trouver le max pour l'échelle
+                        const maxLeaves = Math.max(...monthlyActivity.map(m => m.leaves));
+                        const maxShifts = Math.max(...monthlyActivity.map(m => m.shifts));
+                        
+                        return `
+                            <div style="display: flex; align-items: flex-end; height: 200px; 
+                                 border-left: 2px solid #34495e; border-bottom: 2px solid #34495e; 
+                                 padding-left: 5px; margin-bottom: 30px;">
+                                ${monthlyActivity.map(activity => {
+                                    const leavesHeight = maxLeaves > 0 ? (activity.leaves / maxLeaves * 150) : 0;
+                                    const shiftsHeight = maxShifts > 0 ? (activity.shifts / maxShifts * 150) : 0;
+                                    return `
+                                        <div style="margin-right: 15px; text-align: center; position: relative; width: 40px;">
+                                            <div style="width: 15px; height: ${shiftsHeight}px; background-color: #27ae60; 
+                                                 border-radius: 3px 3px 0 0; margin: 0 auto 2px auto;" 
+                                                 title="Shifts: ${activity.shifts}"></div>
+                                            <div style="width: 15px; height: ${leavesHeight}px; background-color: #e74c3c; 
+                                                 border-radius: 3px 3px 0 0; margin: 0 auto;" 
+                                                 title="Congés: ${activity.leaves}"></div>
+                                            <div style="font-size: 0.8em; margin-top: 5px; transform: rotate(-45deg); 
+                                                 transform-origin: top left; color: #bdc3c7;">
+                                                ${activity.monthName.substring(0, 3)}
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                            <div style="display: flex; gap: 20px; margin-top: 10px;">
+                                <div style="display: flex; align-items: center;">
+                                    <div style="width: 15px; height: 15px; background-color: #27ae60; border-radius: 3px; margin-right: 8px;"></div>
+                                    <span style="font-size: 0.9em; color: #bdc3c7;">Jours travaillés</span>
+                                </div>
+                                <div style="display: flex; align-items: center;">
+                                    <div style="width: 15px; height: 15px; background-color: #e74c3c; border-radius: 3px; margin-right: 8px;"></div>
+                                    <span style="font-size: 0.9em; color: #bdc3c7;">Congés/Absences</span>
+                                </div>
+                            </div>
+                        `;
+                    })()}
+                </div>
+            </div>
+            
+            <div style="border: 2px solid #34495e; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #e74c3c;">⚠️ Points d'attention</h3>
+                <div style="margin-top: 15px;">
+                    <ul style="margin: 0; padding-left: 20px;">
+                        ${(() => {
+                            const attentionPoints = [];
+                            
+                            // Agents avec beaucoup de congés
+                            activeAgents.forEach(agent => {
+                                let agentLeaves = 0;
+                                Object.keys(planningData).forEach(monthKey => {
+                                    if (monthKey.startsWith(currentYear.toString()) && planningData[monthKey][agent.code]) {
+                                        Object.keys(planningData[monthKey][agent.code]).forEach(dateStr => {
+                                            const record = planningData[monthKey][agent.code][dateStr];
+                                            if (['C', 'M', 'A'].includes(record.shift)) {
+                                                agentLeaves++;
+                                            }
+                                        });
+                                    }
+                                });
+                                
+                                if (agentLeaves > 20) {
+                                    attentionPoints.push(
+                                        `<li style="color: #e74c3c; margin-bottom: 8px;">
+                                            ${agent.nom} ${agent.prenom} (${agent.code}) a ${agentLeaves} congés/absences cette année
+                                        </li>`
+                                    );
+                                }
+                            });
+                            
+                            // Groupes avec beaucoup d'avertissements
+                            Object.entries(groupStats).forEach(([group, stats]) => {
+                                if (stats.warnings > 5) {
+                                    attentionPoints.push(
+                                        `<li style="color: #e67e22; margin-bottom: 8px;">
+                                            Groupe ${group} a ${stats.warnings} avertissements actifs
+                                        </li>`
+                                    );
+                                }
+                            });
+                            
+                            // Vérifier les uniformes à renouveler
+                            if (uniforms) {
+                                const uniformsToRenew = uniforms.filter(u => 
+                                    u.shirt.needs_renewal || u.pants.needs_renewal
+                                ).length;
+                                if (uniformsToRenew > 0) {
+                                    attentionPoints.push(
+                                        `<li style="color: #f39c12; margin-bottom: 8px;">
+                                            ${uniformsToRenew} agents ont besoin de renouvellement d'uniforme
+                                        </li>`
+                                    );
+                                }
+                            }
+                            
+                            // Vérifier les radios
+                            if (radios) {
+                                const brokenRadios = radios.filter(r => 
+                                    r.status === 'HS' || r.status === 'REPARATION'
+                                ).length;
+                                if (brokenRadios > 0) {
+                                    attentionPoints.push(
+                                        `<li style="color: #9b59b6; margin-bottom: 8px;">
+                                            ${brokenRadios} radios sont hors service ou en réparation
+                                        </li>`
+                                    );
+                                }
+                            }
+                            
+                            if (attentionPoints.length === 0) {
+                                return '<li style="color: #27ae60;">✅ Aucun point d\'attention critique</li>';
+                            }
+                            
+                            return attentionPoints.join('');
+                        })()}
+                    </ul>
+                </div>
+            </div>
+            
+            <div style="border: 2px solid #34495e; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #9b59b6;">📈 Recommandations</h3>
+                <div style="margin-top: 15px;">
+                    <ol style="margin: 0; padding-left: 20px;">
+                        <li style="margin-bottom: 10px;">
+                            <strong>Optimisation des effectifs:</strong> 
+                            ${Object.entries(groupStats).length > 0 ? 
+                                `Rééquilibrer les effectifs entre groupes (actuellement de ${Math.min(...Object.values(groupStats).map(g => g.count))} à ${Math.max(...Object.values(groupStats).map(g => g.count))} agents)` : 
+                                'Analyser la répartition des agents'}
+                        </li>
+                        <li style="margin-bottom: 10px;">
+                            <strong>Gestion des congés:</strong> 
+                            ${totalLeavesThisYear > (activeAgents.length * 15) ? 
+                                'Mettre en place une politique de congés plus stricte' : 
+                                'Maintenir la politique actuelle de congés'}
+                        </li>
+                        <li style="margin-bottom: 10px;">
+                            <strong>Formation et développement:</strong> 
+                            ${activeWarnings > 0 ? 
+                                'Organiser des sessions de formation sur le respect des procédures' : 
+                                'Continuer les programmes de formation existants'}
+                        </li>
+                        <li style="margin-bottom: 10px;">
+                            <strong>Maintenance des équipements:</strong> 
+                            Planifier la maintenance préventive des radios et uniformes
+                        </li>
+                        <li>
+                            <strong>Amélioration continue:</strong> 
+                            Réviser les procédures de planning tous les trimestres
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📋 Rapport Complet SGA", html, `
+        <button class="popup-button green" onclick="exportFullReportToPDF()">📤 Exporter PDF</button>
+        <button class="popup-button blue" onclick="exportFullReportToExcel()">📊 Exporter Excel</button>
+        <button class="popup-button gray" onclick="displayStatisticsMenu()">Retour</button>
+    `);
+}
 // === AJOUT DES FONCTIONS MANQUANTES AUX ÉVÉNEMENTS ===
 
 // Initialisation des écouteurs d'événements pour les nouvelles fonctionnalités
@@ -6652,7 +8816,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // === FONCTIONS PLACEHOLDER (À IMPLÉMENTER) ===
-function showGlobalStats() { showSnackbar("📈 Statistiques Globales - Bientôt disponible"); }
+
 function showAgentStatsSelection() { showSnackbar("👤 Statistiques par Agent - Bientôt disponible"); }
 function showWorkedDaysMenu() { showSnackbar("📊 Jours Travaillés - Bientôt disponible"); }
 function showGroupStatsSelection() { showSnackbar("📉 Statistiques par Groupe - Bientôt disponible"); }
