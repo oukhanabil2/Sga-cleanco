@@ -5631,7 +5631,1014 @@ function checkPassword() {
         return false;
     }
 }
+// === MODULE JOURS FÉRIÉS - IMPLÉMENTATIONS COMPLÈTES ===
 
+function showAddHolidayForm() {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    
+    let html = `
+        <div class="info-section">
+            <h3>🎉 Ajouter un jour férié</h3>
+            <form id="holidayForm">
+                <div class="form-group">
+                    <label>Date *</label>
+                    <input type="date" id="holidayDate" class="form-input" required 
+                           value="${today.toISOString().split('T')[0]}">
+                </div>
+                <div class="form-group">
+                    <label>Description *</label>
+                    <input type="text" id="holidayDescription" class="form-input" required 
+                           placeholder="Ex: Nouvel An, Fête du Travail...">
+                </div>
+                <div class="form-group">
+                    <label>Type</label>
+                    <select id="holidayType" class="form-input">
+                        <option value="fixe">Fête fixe</option>
+                        <option value="religieux">Fête religieuse</option>
+                        <option value="national">Fête nationale</option>
+                        <option value="local">Fête locale</option>
+                        <option value="exceptionnel">Exceptionnel</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Année d'application</label>
+                    <select id="holidayYear" class="form-input">
+                        <option value="">Toutes les années</option>
+                        ${Array.from({length: 11}, (_, i) => currentYear - 5 + i).map(year => 
+                            `<option value="${year}" ${year === currentYear ? 'selected' : ''}>${year}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Répétition annuelle</label>
+                    <div>
+                        <label style="margin-right: 20px;">
+                            <input type="radio" name="isRecurring" value="true" checked> Oui
+                        </label>
+                        <label>
+                            <input type="radio" name="isRecurring" value="false"> Non
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Commentaires</label>
+                    <textarea id="holidayComments" class="form-input" rows="3" 
+                              placeholder="Informations supplémentaires..."></textarea>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    openPopup("🎉 Ajouter Jour Férié", html, `
+        <button class="popup-button green" onclick="saveHoliday()">💾 Enregistrer</button>
+        <button class="popup-button gray" onclick="displayHolidaysMenu()">Annuler</button>
+    `);
+}
+
+function saveHoliday() {
+    const date = document.getElementById('holidayDate').value;
+    const description = document.getElementById('holidayDescription').value;
+    const type = document.getElementById('holidayType').value;
+    const year = document.getElementById('holidayYear').value;
+    const isRecurring = document.querySelector('input[name="isRecurring"]:checked').value === 'true';
+    const comments = document.getElementById('holidayComments').value;
+    
+    if (!date || !description) {
+        showSnackbar("⚠️ Veuillez remplir les champs obligatoires");
+        return;
+    }
+    
+    // Vérifier si la date existe déjà
+    const existingIndex = holidays.findIndex(h => h.date === date);
+    const holiday = {
+        date: date,
+        description: description,
+        type: type,
+        year: year || null,
+        isRecurring: isRecurring,
+        comments: comments,
+        created_at: new Date().toISOString()
+    };
+    
+    if (existingIndex !== -1) {
+        holidays[existingIndex] = holiday;
+        showSnackbar(`✅ Jour férié mis à jour pour le ${date}`);
+    } else {
+        holidays.push(holiday);
+        showSnackbar(`✅ Jour férié ajouté pour le ${date}`);
+    }
+    
+    saveData();
+    closePopup();
+}
+
+function showDeleteHolidayList() {
+    const currentYear = new Date().getFullYear();
+    const currentYearHolidays = holidays.filter(h => 
+        !h.year || h.year == currentYear || h.isRecurring
+    );
+    
+    let html = `
+        <div class="info-section">
+            <h3>🗑️ Supprimer un jour férié</h3>
+            <p style="color: #e74c3c; font-size: 0.9em; margin-bottom: 15px;">
+                ⚠️ Attention: Cette action est irréversible
+            </p>
+            <input type="text" id="searchHoliday" placeholder="Rechercher par description..." 
+                   style="width:100%; padding:10px; margin-bottom:15px; border-radius:5px; border:none;"
+                   onkeyup="filterHolidays()">
+            <div id="holidayListContainer">
+                ${generateHolidayList(currentYearHolidays)}
+            </div>
+        </div>
+    `;
+    
+    openPopup("🗑️ Supprimer Jour Férié", html, `
+        <button class="popup-button gray" onclick="displayHolidaysMenu()">Retour</button>
+    `);
+}
+
+function generateHolidayList(holidaysList) {
+    if (holidaysList.length === 0) {
+        return '<p style="text-align:center; color:#7f8c8d; padding:20px;">Aucun jour férié trouvé</p>';
+    }
+    
+    return `
+        <table class="classement-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Type</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${holidaysList.map(holiday => {
+                    const dateObj = new Date(holiday.date);
+                    const dayName = JOURS_FRANCAIS[dateObj.getDay()];
+                    return `
+                        <tr>
+                            <td nowrap>
+                                ${dateObj.toLocaleDateString('fr-FR')}<br>
+                                <small>${dayName}</small>
+                            </td>
+                            <td>${holiday.description}</td>
+                            <td>
+                                <span style="background-color:${getHolidayTypeColor(holiday.type)}; 
+                                      color:white; padding:2px 8px; border-radius:12px; font-size:0.8em;">
+                                    ${holiday.type}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="action-btn small red" onclick="deleteHoliday('${holiday.date}')">
+                                    🗑️ Supprimer
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function getHolidayTypeColor(type) {
+    const colors = {
+        'fixe': '#3498db',
+        'religieux': '#9b59b6',
+        'national': '#e74c3c',
+        'local': '#f39c12',
+        'exceptionnel': '#2ecc71'
+    };
+    return colors[type] || '#7f8c8d';
+}
+
+function deleteHoliday(dateStr) {
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer le jour férié du ${dateStr} ?`)) {
+        return;
+    }
+    
+    const holidayIndex = holidays.findIndex(h => h.date === dateStr);
+    if (holidayIndex !== -1) {
+        holidays.splice(holidayIndex, 1);
+        saveData();
+        showSnackbar(`✅ Jour férié supprimé pour le ${dateStr}`);
+        showDeleteHolidayList();
+    }
+}
+
+function showHolidaysList() {
+    const currentYear = new Date().getFullYear();
+    
+    let html = `
+        <div class="info-section">
+            <h3>📋 Liste des Jours Fériés</h3>
+            <div style="margin-bottom: 15px;">
+                <select id="yearFilter" class="form-input" style="width: auto;" onchange="filterHolidaysByYear()">
+                    <option value="all">Toutes les années</option>
+                    <option value="${currentYear}" selected>${currentYear}</option>
+                    <option value="${currentYear + 1}">${currentYear + 1}</option>
+                    <option value="${currentYear - 1}">${currentYear - 1}</option>
+                </select>
+                <select id="typeFilter" class="form-input" style="width: auto; margin-left: 10px;" onchange="filterHolidaysByYear()">
+                    <option value="all">Tous les types</option>
+                    <option value="fixe">Fêtes fixes</option>
+                    <option value="religieux">Religieuses</option>
+                    <option value="national">Nationales</option>
+                </select>
+            </div>
+            <div id="holidaysDisplayContainer">
+                ${generateHolidaysDisplay(currentYear)}
+            </div>
+        </div>
+    `;
+    
+    openPopup("📋 Liste Jours Fériés", html, `
+        <button class="popup-button green" onclick="showAddHolidayForm()">➕ Ajouter</button>
+        <button class="popup-button blue" onclick="generateYearlyHolidays()">🔄 Générer annuelle</button>
+        <button class="popup-button gray" onclick="displayHolidaysMenu()">Retour</button>
+    `);
+}
+
+function generateHolidaysDisplay(year) {
+    let filteredHolidays = holidays.filter(holiday => {
+        if (holiday.isRecurring) return true;
+        if (holiday.year && holiday.year == year) return true;
+        if (!holiday.year) {
+            const holidayYear = new Date(holiday.date).getFullYear();
+            return holidayYear == year;
+        }
+        return false;
+    });
+    
+    filteredHolidays.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    if (filteredHolidays.length === 0) {
+        return '<p style="text-align:center; color:#7f8c8d; padding:40px;">Aucun jour férié pour cette année</p>';
+    }
+    
+    return `
+        <div style="max-height: 400px; overflow-y: auto;">
+            <table class="classement-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Jour</th>
+                        <th>Description</th>
+                        <th>Type</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${filteredHolidays.map(holiday => {
+                        const dateObj = new Date(holiday.date);
+                        const dayName = JOURS_FRANCAIS[dateObj.getDay()];
+                        const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                        
+                        return `
+                            <tr>
+                                <td nowrap>
+                                    ${dateObj.toLocaleDateString('fr-FR')}
+                                    ${isWeekend ? ' 🏖️' : ''}
+                                </td>
+                                <td class="${isWeekend ? 'weekend' : ''}">${dayName}</td>
+                                <td>${holiday.description}</td>
+                                <td>
+                                    <span style="background-color:${getHolidayTypeColor(holiday.type)}; 
+                                          color:white; padding:2px 8px; border-radius:12px; font-size:0.8em;">
+                                        ${holiday.type}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="action-btn small blue" onclick="editHoliday('${holiday.date}')">
+                                        ✏️
+                                    </button>
+                                    <button class="action-btn small red" onclick="deleteHoliday('${holiday.date}')">
+                                        🗑️
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+        
+        <div style="margin-top: 20px; padding: 15px; background: #2c3e50; border-radius: 5px;">
+            <h4 style="margin-top: 0;">📊 Statistiques ${year}</h4>
+            <div style="display: flex; justify-content: space-between;">
+                <div>
+                    <div style="font-size: 1.2em; font-weight: bold; color: #3498db;">${filteredHolidays.length}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Total jours fériés</div>
+                </div>
+                <div>
+                    <div style="font-size: 1.2em; font-weight: bold; color: #f39c12;">
+                        ${filteredHolidays.filter(h => {
+                            const date = new Date(h.date);
+                            return date.getDay() === 0 || date.getDay() === 6;
+                        }).length}
+                    </div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Weekends</div>
+                </div>
+                <div>
+                    <div style="font-size: 1.2em; font-weight: bold; color: #2ecc71;">
+                        ${filteredHolidays.filter(h => h.isRecurring).length}
+                    </div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Récurrents</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function generateYearlyHolidays() {
+    const year = new Date().getFullYear();
+    
+    const defaultHolidays = [
+        { date: `${year}-01-01`, description: 'Nouvel An', type: 'fixe' },
+        { date: `${year}-01-11`, description: 'Manifeste de l\'Indépendance', type: 'fixe' },
+        { date: `${year}-05-01`, description: 'Fête du Travail', type: 'fixe' },
+        { date: `${year}-07-30`, description: 'Fête du Trône', type: 'national' },
+        { date: `${year}-08-14`, description: 'Allégeance Oued Eddahab', type: 'national' },
+        { date: `${year}-08-20`, description: 'Révolution du Roi et du Peuple', type: 'national' },
+        { date: `${year}-08-21`, description: 'Fête de la Jeunesse', type: 'national' },
+        { date: `${year}-11-06`, description: 'Marche Verte', type: 'national' },
+        { date: `${year}-11-18`, description: 'Fête de l\'Indépendance', type: 'national' }
+    ];
+    
+    let addedCount = 0;
+    defaultHolidays.forEach(holiday => {
+        const existing = holidays.find(h => h.date === holiday.date);
+        if (!existing) {
+            holidays.push({
+                ...holiday,
+                isRecurring: true,
+                created_at: new Date().toISOString()
+            });
+            addedCount++;
+        }
+    });
+    
+    saveData();
+    showSnackbar(`✅ ${addedCount} jours fériés standards ajoutés pour ${year}`);
+    showHolidaysList();
+}
+
+function showHolidaysByYear() {
+    const currentYear = new Date().getFullYear();
+    
+    let html = `
+        <div class="info-section">
+            <h3>📅 Jours Fériés par Année</h3>
+            <div class="form-group">
+                <label>Sélectionner l'année:</label>
+                <select id="selectYear" class="form-input" onchange="displaySelectedYearHolidays()">
+                    ${Array.from({length: 5}, (_, i) => currentYear + i - 2).map(year => 
+                        `<option value="${year}" ${year === currentYear ? 'selected' : ''}>${year}</option>`
+                    ).join('')}
+                </select>
+            </div>
+            <div id="yearHolidaysContainer" style="margin-top: 20px;">
+                ${generateYearlyHolidaysCalendar(currentYear)}
+            </div>
+        </div>
+    `;
+    
+    openPopup("📅 Voir par Année", html, `
+        <button class="popup-button blue" onclick="exportHolidaysCalendar()">📤 Exporter</button>
+        <button class="popup-button gray" onclick="displayHolidaysMenu()">Retour</button>
+    `);
+}
+// === MODULE HABILLEMENT - IMPLÉMENTATIONS COMPLÈTES ===
+
+function showAddUniformForm() {
+    const activeAgents = agents.filter(a => a.statut === 'actif');
+    
+    let html = `
+        <div class="info-section">
+            <h3>👔 Enregistrer un équipement d'habillement</h3>
+            <form id="uniformForm">
+                <div class="form-group">
+                    <label>Agent *</label>
+                    <select id="uniformAgent" class="form-input" required>
+                        <option value="">Sélectionner un agent</option>
+                        ${activeAgents.map(a => 
+                            `<option value="${a.code}">${a.nom} ${a.prenom} (${a.code}) - Groupe ${a.groupe}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                
+                <div class="uniform-section">
+                    <h4>Chemise</h4>
+                    <div class="form-group">
+                        <label>Taille *</label>
+                        <select id="shirtSize" class="form-input" required>
+                            <option value="">Sélectionner</option>
+                            <option value="XS">XS</option>
+                            <option value="S">S</option>
+                            <option value="M">M</option>
+                            <option value="L">L</option>
+                            <option value="XL">XL</option>
+                            <option value="XXL">XXL</option>
+                            <option value="XXXL">XXXL</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Date de fourniture *</label>
+                        <input type="date" id="shirtDate" class="form-input" required value="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                    <div class="form-group">
+                        <label>État</label>
+                        <select id="shirtCondition" class="form-input">
+                            <option value="NEUF">Neuf</option>
+                            <option value="BON">Bon état</option>
+                            <option value="USAGE">Usé</option>
+                            <option value="MAUVAIS">Mauvais état</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="uniform-section">
+                    <h4>Pantalon</h4>
+                    <div class="form-group">
+                        <label>Taille *</label>
+                        <select id="pantsSize" class="form-input" required>
+                            <option value="">Sélectionner</option>
+                            ${Array.from({length: 15}, (_, i) => 36 + i).map(size => 
+                                `<option value="${size}">${size}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Date de fourniture *</label>
+                        <input type="date" id="pantsDate" class="form-input" required value="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                    <div class="form-group">
+                        <label>État</label>
+                        <select id="pantsCondition" class="form-input">
+                            <option value="NEUF">Neuf</option>
+                            <option value="BON">Bon état</option>
+                            <option value="USAGE">Usé</option>
+                            <option value="MAUVAIS">Mauvais état</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="uniform-section">
+                    <h4>Veste/Jacket (optionnel)</h4>
+                    <div class="form-group">
+                        <label>Taille</label>
+                        <select id="jacketSize" class="form-input">
+                            <option value="">Non fourni</option>
+                            <option value="XS">XS</option>
+                            <option value="S">S</option>
+                            <option value="M">M</option>
+                            <option value="L">L</option>
+                            <option value="XL">XL</option>
+                            <option value="XXL">XXL</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Date de fourniture</label>
+                        <input type="date" id="jacketDate" class="form-input">
+                    </div>
+                </div>
+                
+                <div class="uniform-section">
+                    <h4>Accessoires</h4>
+                    <div class="form-group">
+                        <label>Cravate fournie</label>
+                        <div>
+                            <label style="margin-right: 20px;">
+                                <input type="radio" name="hasTie" value="true" checked> Oui
+                            </label>
+                            <label>
+                                <input type="radio" name="hasTie" value="false"> Non
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Chaussures (pointure)</label>
+                        <input type="number" id="shoesSize" class="form-input" min="35" max="50" step="0.5" placeholder="Ex: 42">
+                    </div>
+                    <div class="form-group">
+                        <label>Autres équipements</label>
+                        <textarea id="otherEquipment" class="form-input" rows="2" placeholder="Casquette, ceinture, etc."></textarea>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Commentaires</label>
+                    <textarea id="uniformComments" class="form-input" rows="3" placeholder="Remarques supplémentaires..."></textarea>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    openPopup("👔 Enregistrer Habillement", html, `
+        <button class="popup-button green" onclick="saveUniform()">💾 Enregistrer</button>
+        <button class="popup-button gray" onclick="displayUniformMenu()">Annuler</button>
+    `);
+}
+
+function saveUniform() {
+    const agentCode = document.getElementById('uniformAgent').value;
+    const shirtSize = document.getElementById('shirtSize').value;
+    const shirtDate = document.getElementById('shirtDate').value;
+    const shirtCondition = document.getElementById('shirtCondition').value;
+    const pantsSize = document.getElementById('pantsSize').value;
+    const pantsDate = document.getElementById('pantsDate').value;
+    const pantsCondition = document.getElementById('pantsCondition').value;
+    const jacketSize = document.getElementById('jacketSize').value;
+    const jacketDate = document.getElementById('jacketDate').value;
+    const hasTie = document.querySelector('input[name="hasTie"]:checked').value === 'true';
+    const shoesSize = document.getElementById('shoesSize').value;
+    const otherEquipment = document.getElementById('otherEquipment').value;
+    const comments = document.getElementById('uniformComments').value;
+    
+    if (!agentCode || !shirtSize || !shirtDate || !pantsSize || !pantsDate) {
+        showSnackbar("⚠️ Veuillez remplir les champs obligatoires");
+        return;
+    }
+    
+    const uniform = {
+        id: 'UNIF' + Date.now(),
+        agent_code: agentCode,
+        shirt: {
+            size: shirtSize,
+            date: shirtDate,
+            condition: shirtCondition,
+            needs_renewal: isRenewalNeeded(shirtDate)
+        },
+        pants: {
+            size: pantsSize,
+            date: pantsDate,
+            condition: pantsCondition,
+            needs_renewal: isRenewalNeeded(pantsDate)
+        },
+        jacket: jacketSize ? {
+            size: jacketSize,
+            date: jacketDate || shirtDate,
+            condition: 'NEUF'
+        } : null,
+        accessories: {
+            tie: hasTie,
+            shoes_size: shoesSize,
+            other: otherEquipment
+        },
+        comments: comments,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    };
+    
+    // Vérifier si l'agent a déjà un uniforme
+    const existingIndex = uniforms.findIndex(u => u.agent_code === agentCode);
+    if (existingIndex !== -1) {
+        uniforms[existingIndex] = uniform;
+        showSnackbar(`✅ Habillement mis à jour pour l'agent ${agentCode}`);
+    } else {
+        uniforms.push(uniform);
+        showSnackbar(`✅ Habillement enregistré pour l'agent ${agentCode}`);
+    }
+    
+    saveData();
+    closePopup();
+}
+
+function isRenewalNeeded(dateStr) {
+    const date = new Date(dateStr);
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    return date < twoYearsAgo;
+}
+
+function showEditUniformList() {
+    let html = `
+        <div class="info-section">
+            <h3>✏️ Modifier un habillement</h3>
+            <input type="text" id="searchUniform" placeholder="Rechercher agent..." 
+                   style="width:100%; padding:10px; margin-bottom:15px; border-radius:5px; border:none;"
+                   onkeyup="filterUniforms()">
+            <div id="uniformListContainer">
+                ${generateUniformsList()}
+            </div>
+        </div>
+    `;
+    
+    openPopup("✏️ Modifier Habillement", html, `
+        <button class="popup-button gray" onclick="displayUniformMenu()">Retour</button>
+    `);
+}
+
+function generateUniformsList() {
+    if (uniforms.length === 0) {
+        return '<p style="text-align:center; color:#7f8c8d; padding:20px;">Aucun habillement enregistré</p>';
+    }
+    
+    return `
+        <table class="classement-table">
+            <thead>
+                <tr>
+                    <th>Agent</th>
+                    <th>Chemise</th>
+                    <th>Pantalon</th>
+                    <th>Dernière mise à jour</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${uniforms.map(uniform => {
+                    const agent = agents.find(a => a.code === uniform.agent_code);
+                    const agentName = agent ? `${agent.nom} ${agent.prenom}` : uniform.agent_code;
+                    const needsRenewal = uniform.shirt.needs_renewal || uniform.pants.needs_renewal;
+                    
+                    return `
+                        <tr>
+                            <td>
+                                <strong>${agentName}</strong><br>
+                                <small>${uniform.agent_code}</small>
+                            </td>
+                            <td>
+                                ${uniform.shirt.size}<br>
+                                <small>${new Date(uniform.shirt.date).toLocaleDateString('fr-FR')}</small>
+                                ${uniform.shirt.needs_renewal ? '<br><span style="color:#e74c3c; font-size:0.8em;">⚠️ À renouveler</span>' : ''}
+                            </td>
+                            <td>
+                                ${uniform.pants.size}<br>
+                                <small>${new Date(uniform.pants.date).toLocaleDateString('fr-FR')}</small>
+                                ${uniform.pants.needs_renewal ? '<br><span style="color:#e74c3c; font-size:0.8em;">⚠️ À renouveler</span>' : ''}
+                            </td>
+                            <td>${new Date(uniform.updated_at).toLocaleDateString('fr-FR')}</td>
+                            <td>
+                                <button class="action-btn small blue" onclick="editUniform('${uniform.id}')">✏️</button>
+                                <button class="action-btn small red" onclick="deleteUniform('${uniform.id}')">🗑️</button>
+                                ${needsRenewal ? 
+                                    '<button class="action-btn small orange" onclick="showRenewalForm(\'' + uniform.id + '\')">🔄</button>' : 
+                                    ''}
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function showUniformReport() {
+    const stats = {
+        total: uniforms.length,
+        needsRenewal: uniforms.filter(u => u.shirt.needs_renewal || u.pants.needs_renewal).length,
+        shirtSizes: {},
+        pantsSizes: {}
+    };
+    
+    uniforms.forEach(uniform => {
+        stats.shirtSizes[uniform.shirt.size] = (stats.shirtSizes[uniform.shirt.size] || 0) + 1;
+        stats.pantsSizes[uniform.pants.size] = (stats.pantsSizes[uniform.pants.size] || 0) + 1;
+    });
+    
+    let html = `
+        <div class="info-section">
+            <h3>📋 Rapport d'Habillement</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px;">
+                <div style="text-align: center; padding: 15px; background: #2c3e50; border-radius: 5px;">
+                    <div style="font-size: 2em; font-weight: bold; color: #3498db;">${stats.total}</div>
+                    <div style="font-size: 0.9em; color: #bdc3c7;">Agents équipés</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: ${stats.needsRenewal > 0 ? '#e74c3c' : '#27ae60'}; border-radius: 5px;">
+                    <div style="font-size: 2em; font-weight: bold; color: white;">${stats.needsRenewal}</div>
+                    <div style="font-size: 0.9em; color: white;">À renouveler</div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div>
+                    <h4>📏 Tailles de chemises</h4>
+                    ${Object.entries(stats.shirtSizes).map(([size, count]) => `
+                        <div style="margin: 5px 0; padding: 8px; background: #34495e; border-radius: 3px;">
+                            <span style="font-weight: bold;">Taille ${size}:</span>
+                            <span style="float: right;">${count}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <div>
+                    <h4>📏 Tailles de pantalons</h4>
+                    ${Object.entries(stats.pantsSizes).map(([size, count]) => `
+                        <div style="margin: 5px 0; padding: 8px; background: #34495e; border-radius: 3px;">
+                            <span style="font-weight: bold;">Taille ${size}:</span>
+                            <span style="float: right;">${count}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            
+            <h4>👕 Équipements à renouveler</h4>
+            <div style="max-height: 200px; overflow-y: auto;">
+                ${uniforms.filter(u => u.shirt.needs_renewal || u.pants.needs_renewal).map(uniform => {
+                    const agent = agents.find(a => a.code === uniform.agent_code);
+                    const agentName = agent ? `${agent.nom} ${agent.prenom}` : uniform.agent_code;
+                    const items = [];
+                    if (uniform.shirt.needs_renewal) items.push(`Chemise (${uniform.shirt.size})`);
+                    if (uniform.pants.needs_renewal) items.push(`Pantalon (${uniform.pants.size})`);
+                    
+                    return `
+                        <div style="margin: 5px 0; padding: 10px; background: #2c3e50; border-radius: 3px;">
+                            <strong>${agentName}</strong> (${uniform.agent_code})<br>
+                            <span style="color: #e74c3c; font-size: 0.9em;">${items.join(', ')}</span>
+                        </div>
+                    `;
+                }).join('') || '<p style="text-align:center; color:#7f8c8d;">Aucun renouvellement nécessaire</p>'}
+            </div>
+        </div>
+    `;
+    
+    openPopup("📋 Rapport Habillement", html, `
+        <button class="popup-button blue" onclick="exportUniformReport()">📤 Exporter</button>
+        <button class="popup-button gray" onclick="displayUniformMenu()">Retour</button>
+    `);
+}
+
+function showUniformStats() {
+    const shirtSizeCount = {};
+    const pantsSizeCount = {};
+    const conditions = {
+        shirt: { NEUF: 0, BON: 0, USAGE: 0, MAUVAIS: 0 },
+        pants: { NEUF: 0, BON: 0, USAGE: 0, MAUVAIS: 0 }
+    };
+    
+    uniforms.forEach(uniform => {
+        shirtSizeCount[uniform.shirt.size] = (shirtSizeCount[uniform.shirt.size] || 0) + 1;
+        pantsSizeCount[uniform.pants.size] = (pantsSizeCount[uniform.pants.size] || 0) + 1;
+        conditions.shirt[uniform.shirt.condition] = (conditions.shirt[uniform.shirt.condition] || 0) + 1;
+        conditions.pants[uniform.pants.condition] = (conditions.pants[uniform.pants.condition] || 0) + 1;
+    });
+    
+    let html = `
+        <div class="info-section">
+            <h3>📊 Statistiques des Tailles</h3>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div>
+                    <h4>Chemises par taille</h4>
+                    ${Object.entries(shirtSizeCount)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([size, count]) => {
+                            const percentage = ((count / uniforms.length) * 100).toFixed(1);
+                            return `
+                                <div style="margin: 10px 0;">
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span>Taille ${size}:</span>
+                                        <span style="font-weight: bold;">${count} (${percentage}%)</span>
+                                    </div>
+                                    <div style="height: 10px; background: #34495e; border-radius: 5px; overflow: hidden;">
+                                        <div style="height: 100%; width: ${percentage}%; background: #3498db; border-radius: 5px;"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                </div>
+                
+                <div>
+                    <h4>Pantalons par taille</h4>
+                    ${Object.entries(pantsSizeCount)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([size, count]) => {
+                            const percentage = ((count / uniforms.length) * 100).toFixed(1);
+                            return `
+                                <div style="margin: 10px 0;">
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span>Taille ${size}:</span>
+                                        <span style="font-weight: bold;">${count} (${percentage}%)</span>
+                                    </div>
+                                    <div style="height: 10px; background: #34495e; border-radius: 5px; overflow: hidden;">
+                                        <div style="height: 100%; width: ${percentage}%; background: #9b59b6; border-radius: 5px;"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <h4>État des chemises</h4>
+                    ${Object.entries(conditions.shirt).map(([condition, count]) => {
+                        const percentage = ((count / uniforms.length) * 100).toFixed(1);
+                        const color = condition === 'NEUF' ? '#27ae60' : 
+                                    condition === 'BON' ? '#3498db' : 
+                                    condition === 'USAGE' ? '#f39c12' : '#e74c3c';
+                        return `
+                            <div style="margin: 5px 0; padding: 8px; background: ${color}; color: white; border-radius: 3px;">
+                                <span>${condition}:</span>
+                                <span style="float: right; font-weight: bold;">${count} (${percentage}%)</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+                
+                <div>
+                    <h4>État des pantalons</h4>
+                    ${Object.entries(conditions.pants).map(([condition, count]) => {
+                        const percentage = ((count / uniforms.length) * 100).toFixed(1);
+                        const color = condition === 'NEUF' ? '#27ae60' : 
+                                    condition === 'BON' ? '#3498db' : 
+                                    condition === 'USAGE' ? '#f39c12' : '#e74c3c';
+                        return `
+                            <div style="margin: 5px 0; padding: 8px; background: ${color}; color: white; border-radius: 3px;">
+                                <span>${condition}:</span>
+                                <span style="float: right; font-weight: bold;">${count} (${percentage}%)</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📊 Statistiques Tailles", html, `
+        <button class="popup-button gray" onclick="showUniformReport()">Retour</button>
+    `);
+}
+
+function showUniformDeadlines() {
+    const today = new Date();
+    const renewalDeadlines = [];
+    
+    uniforms.forEach(uniform => {
+        const shirtDate = new Date(uniform.shirt.date);
+        const pantsDate = new Date(uniform.pants.date);
+        const shirtRenewalDate = new Date(shirtDate);
+        const pantsRenewalDate = new Date(pantsDate);
+        
+        shirtRenewalDate.setFullYear(shirtDate.getFullYear() + 2);
+        pantsRenewalDate.setFullYear(pantsDate.getFullYear() + 2);
+        
+        const daysUntilShirtRenewal = Math.ceil((shirtRenewalDate - today) / (1000 * 60 * 60 * 24));
+        const daysUntilPantsRenewal = Math.ceil((pantsRenewalDate - today) / (1000 * 60 * 60 * 24));
+        
+        if (daysUntilShirtRenewal <= 90 || daysUntilPantsRenewal <= 90) {
+            const agent = agents.find(a => a.code === uniform.agent_code);
+            renewalDeadlines.push({
+                agent: agent ? `${agent.nom} ${agent.prenom}` : uniform.agent_code,
+                code: uniform.agent_code,
+                shirt: {
+                    size: uniform.shirt.size,
+                    date: uniform.shirt.date,
+                    renewalDate: shirtRenewalDate.toISOString().split('T')[0],
+                    daysLeft: daysUntilShirtRenewal
+                },
+                pants: {
+                    size: uniform.pants.size,
+                    date: uniform.pants.date,
+                    renewalDate: pantsRenewalDate.toISOString().split('T')[0],
+                    daysLeft: daysUntilPantsRenewal
+                }
+            });
+        }
+    });
+    
+    renewalDeadlines.sort((a, b) => {
+        const aMin = Math.min(a.shirt.daysLeft, a.pants.daysLeft);
+        const bMin = Math.min(b.shirt.daysLeft, b.pants.daysLeft);
+        return aMin - bMin;
+    });
+    
+    let html = `
+        <div class="info-section">
+            <h3>📅 Échéances de Renouvellement</h3>
+            <p style="color: #7f8c8d; margin-bottom: 20px;">
+                Affichage des équipements à renouveler dans les 90 prochains jours
+            </p>
+            
+            ${renewalDeadlines.length === 0 ? 
+                '<p style="text-align:center; color:#27ae60; padding:20px;">🎉 Aucune échéance dans les 90 prochains jours</p>' :
+                `
+                <table class="classement-table">
+                    <thead>
+                        <tr>
+                            <th>Agent</th>
+                            <th>Équipement</th>
+                            <th>Taille</th>
+                            <th>Date renouvellement</th>
+                            <th>Jours restants</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${renewalDeadlines.flatMap(deadline => {
+                            const items = [];
+                            if (deadline.shirt.daysLeft <= 90) {
+                                items.push({
+                                    type: 'Chemise',
+                                    size: deadline.shirt.size,
+                                    date: deadline.shirt.renewalDate,
+                                    daysLeft: deadline.shirt.daysLeft,
+                                    status: deadline.shirt.daysLeft <= 0 ? 'DÉPASSÉ' : 
+                                           deadline.shirt.daysLeft <= 30 ? 'URGENT' : 
+                                           deadline.shirt.daysLeft <= 60 ? 'PROCHE' : 'NORMAL'
+                                });
+                            }
+                            if (deadline.pants.daysLeft <= 90) {
+                                items.push({
+                                    type: 'Pantalon',
+                                    size: deadline.pants.size,
+                                    date: deadline.pants.renewalDate,
+                                    daysLeft: deadline.pants.daysLeft,
+                                    status: deadline.pants.daysLeft <= 0 ? 'DÉPASSÉ' : 
+                                           deadline.pants.daysLeft <= 30 ? 'URGENT' : 
+                                           deadline.pants.daysLeft <= 60 ? 'PROCHE' : 'NORMAL'
+                                });
+                            }
+                            
+                            return items.map((item, index) => {
+                                const statusColor = item.status === 'DÉPASSÉ' ? '#e74c3c' :
+                                                   item.status === 'URGENT' ? '#e67e22' :
+                                                   item.status === 'PROCHE' ? '#f39c12' : '#3498db';
+                                
+                                return `
+                                    <tr>
+                                        <td>${index === 0 ? `<strong>${deadline.agent}</strong><br><small>${deadline.code}</small>` : ''}</td>
+                                        <td>${item.type}</td>
+                                        <td>${item.size}</td>
+                                        <td>${item.date}</td>
+                                        <td>
+                                            <span style="background-color:${statusColor}; color:white; padding:2px 8px; border-radius:12px;">
+                                                ${item.daysLeft} j
+                                            </span>
+                                        </td>
+                                        <td>
+                                            ${index === 0 ? 
+                                                `<button class="action-btn small blue" onclick="showAddUniformFormForAgent('${deadline.code}')">
+                                                    ✏️
+                                                </button>` : ''}
+                                        </td>
+                                    </tr>
+                                `;
+                            });
+                        }).join('')}
+                    </tbody>
+                </table>
+                `
+            }
+            
+            <div style="margin-top: 20px; padding: 15px; background: #2c3e50; border-radius: 5px;">
+                <h4 style="margin-top: 0;">Légende</h4>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div style="width: 15px; height: 15px; background-color: #e74c3c; border-radius: 3px;"></div>
+                        <span style="font-size: 0.9em;">Dépassé</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div style="width: 15px; height: 15px; background-color: #e67e22; border-radius: 3px;"></div>
+                        <span style="font-size: 0.9em;">Urgent (≤ 30j)</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div style="width: 15px; height: 15px; background-color: #f39c12; border-radius: 3px;"></div>
+                        <span style="font-size: 0.9em;">Proche (≤ 60j)</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div style="width: 15px; height: 15px; background-color: #3498db; border-radius: 3px;"></div>
+                        <span style="font-size: 0.9em;">Normal (≤ 90j)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    openPopup("📅 Échéances Habillement", html, `
+        <button class="popup-button green" onclick="generateRenewalReport()">📋 Générer rapport</button>
+        <button class="popup-button gray" onclick="showUniformReport()">Retour</button>
+    `);
+}
+
+function exportUniformReport() {
+    if (uniforms.length === 0) {
+        showSnackbar("ℹ️ Aucune donnée d'habillement à exporter");
+        return;
+    }
+    
+    let csvContent = "Rapport d'Habillement - " + new Date().toLocaleDateString('fr-FR') + "\n\n";
+    csvContent += "Agent;Code;Groupe;Chemise Taille;Chemise Date;Chemise État;";
+    csvContent += "Pantalon Taille;Pantalon Date;Pantalon État;Veste Taille;Veste Date;";
+    csvContent += "Cravate;Pointure Chaussures;Dernière mise à jour\n";
+    
+    uniforms.forEach(uniform => {
+        const agent = agents.find(a => a.code === uniform.agent_code);
+        csvContent += `"${agent ? agent.nom + ' ' + agent.prenom : uniform.agent_code}";`;
+        csvContent += `${uniform.agent_code};${agent ? agent.groupe : 'N/A'};`;
+        csvContent += `${uniform.shirt.size};${uniform.shirt.date};${uniform.shirt.condition};`;
+        csvContent += `${uniform.pants.size};${uniform.pants.date};${uniform.pants.condition};`;
+        csvContent += `${uniform.jacket ? uniform.jacket.size : 'N/A'};${uniform.jacket ? uniform.jacket.date : 'N/A'};`;
+        csvContent += `${uniform.accessories.tie ? 'OUI' : 'NON'};${uniform.accessories.shoes_size || 'N/A'};`;
+        csvContent += `${new Date(uniform.updated_at).toLocaleDateString('fr-FR')}\n`;
+    });
+    
+    downloadCSV(csvContent, `Rapport_Habillement_${new Date().toISOString().split('T')[0]}.csv`);
+    showSnackbar("✅ Rapport d'habillement exporté avec succès");
+}
 // === AJOUT DES FONCTIONS MANQUANTES AUX ÉVÉNEMENTS ===
 
 // Initialisation des écouteurs d'événements pour les nouvelles fonctionnalités
@@ -5643,6 +6650,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     console.log("✅ Toutes les fonctions manquantes ont été implémentées");
 });
+
 // === FONCTIONS PLACEHOLDER (À IMPLÉMENTER) ===
 function showGlobalStats() { showSnackbar("📈 Statistiques Globales - Bientôt disponible"); }
 function showAgentStatsSelection() { showSnackbar("👤 Statistiques par Agent - Bientôt disponible"); }
@@ -5658,18 +6666,6 @@ function showSearchPanicCode() { showSnackbar("🔍 Rechercher Code Panique - Bi
 function showEditRadioList() { showSnackbar("✏️ Modifier Radio - Bientôt disponible"); }
 function showRadiosStatus() { showSnackbar("📊 Statut Radios - Bientôt disponible"); }
 function showRadiosHistory() { showSnackbar("📋 Historique Radios - Bientôt disponible"); }
-function showAddUniformForm() { showSnackbar("➕ Enregistrer Habillement - Bientôt disponible"); }
-function showEditUniformList() { showSnackbar("✏️ Modifier Habillement - Bientôt disponible"); }
-function showUniformReport() { showSnackbar("📋 Rapport Habillement - Bientôt disponible"); }
-function showUniformStats() { showSnackbar("📊 Statistiques Tailles - Bientôt disponible"); }
-function showUniformDeadlines() { showSnackbar("📅 Échéances Habillement - Bientôt disponible"); }
-function exportUniformReport() { showSnackbar("📤 Exporter Rapport Habillement - Bientôt disponible"); }
-function showAddHolidayForm() { showSnackbar("➕ Ajouter Jour Férié - Bientôt disponible"); }
-function showDeleteHolidayList() { showSnackbar("🗑️ Supprimer Jour Férié - Bientôt disponible"); }
-function showHolidaysList() { showSnackbar("📋 Liste Jours Fériés - Bientôt disponible"); }
-function generateYearlyHolidays() { showSnackbar("🔄 Générer Jours Fériés Annuels - Bientôt disponible"); }
-function showHolidaysByYear() { showSnackbar("📅 Voir Jours Fériés par Année - Bientôt disponible"); }
-function exportLeavesPDF() { showSnackbar("📋 Exporter Congés PDF - Bientôt disponible"); }
 function exportFullReport() { showSnackbar("📊 Exporter Rapport Complet - Bientôt disponible"); }
 function backupAllData() { showSnackbar("💾 Sauvegarde Complète - Bientôt disponible"); }
 function showSettings() { showSnackbar("⚙️ Paramètres - Bientôt disponible"); }
